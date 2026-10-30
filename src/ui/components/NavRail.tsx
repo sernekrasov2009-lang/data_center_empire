@@ -1,0 +1,48 @@
+import { useT } from "../../i18n";
+
+interface NavItem {
+  key: string;
+  ready: boolean;
+}
+
+const ITEMS: readonly NavItem[] = [
+  { key: "nav.dashboard", ready: true },
+  { key: "nav.build", ready: false },
+  { key: "nav.warehouse", ready: false },
+  { key: "nav.location", ready: false },
+  { key: "nav.services", ready: false },
+  { key: "nav.infra", ready: false },
+  { key: "nav.staff", ready: false },
+  { key: "nav.research", ready: false },
+  { key: "nav.market", ready: false },
+  { key: "nav.finance", ready: false },
+  { key: "nav.journal", ready: false },
+  { key: "nav.stats", ready: false },
+  { key: "nav.settings", ready: false },
+];
+
+export function NavRail(): React.JSX.Element {
+  const t = useT();
+
+  return (
+    <nav className="nav" aria-label={t("nav.title")}>
+      <div className="nav__title">{t("nav.title")}</div>
+      <ul className="nav__list">
+        {ITEMS.map((item) => (
+          <li key={item.key}>
+            <button
+              type="button"
+              className="nav__item"
+              data-active={item.ready}
+              disabled={!item.ready}
+              title={item.ready ? undefined : t("nav.soon")}
+            >
+              <span>{t(item.key)}</span>
+              {!item.ready && <span className="nav__badge">{t("nav.soon")}</span>}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
