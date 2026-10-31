@@ -1,15 +1,52 @@
 import { describe, expect, it } from "vitest";
-import { balance } from "../src/data";
-import { advanceTicks, createGame, setSpeed, togglePause } from "../src/sim";
+import { balance, getDifficulty } from "../src/data";
+import {
+  DEFAULT_COMPANY_NAME,
+  GAME_STATE_VERSION,
+  advanceTicks,
+  createGame,
+  renameCompany,
+  setPaused,
+  setSpeed,
+  togglePause,
+} from "../src/sim";
 
 describe("игровой цикл", () => {
   it("новая игра стартует на паузе со стартовыми деньгами", () => {
     const state = createGame();
+    expect(state.version).toBe(GAME_STATE_VERSION);
     expect(state.time.paused).toBe(true);
     expect(state.time.speed).toBe(1);
     expect(state.time.hour).toBe(0);
     expect(state.money).toBe(balance.start.money);
     expect(state.seed).toBe(balance.start.seed);
+    expect(state.companyName).toBe(DEFAULT_COMPANY_NAME);
+    expect(state.difficulty).toBe("normal");
+  });
+
+  it("принимает сложность, название и seed новой игры", () => {
+    const state = createGame({ difficulty: "hard", companyName: "  Acme  ", seed: 55 });
+    expect(state.difficulty).toBe("hard");
+    expect(state.companyName).toBe("Acme");
+    expect(state.seed).toBe(55);
+    expect(state.money).toBe(getDifficulty("hard").startMoney);
+  });
+
+  it("переименовывает компанию и не принимает пустое имя", () => {
+    const named = renameCompany(createGame(), "  New Name  ");
+    expect(named.companyName).toBe("New Name");
+
+    const empty = renameCompany(named, "   ");
+    expect(empty).toBe(named);
+  });
+
+  it("ставит и снимает паузу без изменения скорости", () => {
+    const running = setSpeed(createGame(), 20);
+    const paused = setPaused(running, true);
+    expect(paused.time.paused).toBe(true);
+    expect(paused.time.speed).toBe(20);
+    expect(setPaused(paused, true)).toBe(paused);
+    expect(setPaused(paused, false).time.paused).toBe(false);
   });
 
   it("не мутирует исходное состояние", () => {

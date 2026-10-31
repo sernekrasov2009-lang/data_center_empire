@@ -1,13 +1,18 @@
-import { balance } from "../data";
+import { balance, difficulties, getDifficulty, type DifficultyId } from "../data";
 import { createRng } from "./core/rng";
 import { HOURS_PER_DAY, HOURS_PER_MONTH, HOURS_PER_YEAR } from "./core/time";
 import type { GameState, SimEvent, Speed } from "./types";
 
-export const SAVE_VERSION = 1;
+/** Версия структуры GameState. Меняется при миграциях сохранений. */
+export const GAME_STATE_VERSION = 2;
+
+export const DEFAULT_COMPANY_NAME = "Uptime Hosting";
 
 export interface NewGameOptions {
   seed?: number;
   money?: number;
+  difficulty?: DifficultyId;
+  companyName?: string;
 }
 
 export interface AdvanceResult {
@@ -18,13 +23,18 @@ export interface AdvanceResult {
 }
 
 export function createGame(options: NewGameOptions = {}): GameState {
+  const difficulty = options.difficulty ?? difficulties.defaultMode;
   const seed = options.seed ?? balance.start.seed;
+  const money = options.money ?? getDifficulty(difficulty).startMoney;
+
   return {
-    version: SAVE_VERSION,
+    version: GAME_STATE_VERSION,
     seed,
     rng: createRng(seed),
     time: { hour: 0, speed: 1, paused: true },
-    money: options.money ?? balance.start.money,
+    money,
+    companyName: (options.companyName ?? DEFAULT_COMPANY_NAME).trim() || DEFAULT_COMPANY_NAME,
+    difficulty,
     stats: { ticks: 0 },
     events: [],
     nextEventId: 1,
@@ -92,4 +102,15 @@ export function togglePause(state: GameState): GameState {
     ...state,
     time: { ...state.time, paused: !state.time.paused },
   };
+}
+
+export function setPaused(state: GameState, paused: boolean): GameState {
+  if (state.time.paused === paused) return state;
+  return { ...state, time: { ...state.time, paused } };
+}
+
+export function renameCompany(state: GameState, companyName: string): GameState {
+  const trimmed = companyName.trim();
+  if (!trimmed) return state;
+  return { ...state, companyName: trimmed };
 }

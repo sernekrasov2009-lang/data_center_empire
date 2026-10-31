@@ -1,4 +1,4 @@
-import type { Speed } from "../data";
+import type { DifficultyId, Speed } from "../data";
 
 export type { Speed };
 
@@ -35,6 +35,8 @@ export interface GameState {
   rng: RngState;
   time: GameTime;
   money: number;
+  companyName: string;
+  difficulty: DifficultyId;
   stats: GameStats;
   /** Кольцевой буфер последних событий (новые в конце). */
   events: SimEvent[];

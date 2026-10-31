@@ -2,10 +2,10 @@ import { useMemo } from "react";
 import en from "./en.json";
 import ru from "./ru.json";
 import { useGameStore } from "../state/store";
+import type { Language } from "./language";
 
-export type Language = "ru" | "en";
-
-export const LANGUAGES: readonly Language[] = ["ru", "en"];
+export type { Language } from "./language";
+export { LANGUAGES, isLanguage } from "./language";
 
 const dictionaries: Record<Language, Record<string, string>> = {
   ru: ru as Record<string, string>,
@@ -24,8 +24,11 @@ export function translate(language: Language, key: string, params?: Record<strin
   });
 }
 
-/** Хук: функция перевода, привязанная к выбранному языку. */
+/** Хук: функция перевода, привязанная к выбранному языку из настроек. */
 export function useT(): Translate {
-  const language = useGameStore((state) => state.language);
-  return useMemo(() => (key: string, params?: Record<string, string | number>) => translate(language, key, params), [language]);
+  const language = useGameStore((state) => state.settings.game.language);
+  return useMemo(
+    () => (key: string, params?: Record<string, string | number>) => translate(language, key, params),
+    [language],
+  );
 }

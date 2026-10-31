@@ -1,12 +1,13 @@
 import { useEffect } from "react";
+import { actionForEvent } from "../state/hotkeys";
 import { useGameStore } from "../state/store";
 import type { Speed } from "../sim";
 
-const SPEED_KEYS: Record<string, Speed> = {
-  "1": 1,
-  "2": 5,
-  "3": 20,
-  "4": 60,
+const SPEED_BY_ACTION: Partial<Record<string, Speed>> = {
+  speed1: 1,
+  speed2: 5,
+  speed3: 20,
+  speed4: 60,
 };
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -14,29 +15,74 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable;
 }
 
-/** Горячие клавиши этапа 0: пауза, скорости, оверлей F3. F11 обрабатывает main-процесс. */
+/** Горячие клавиши из настроек: пауза, скорости, сохранения, оверлей, меню паузы. */
 export function useHotkeys(): void {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat || isTypingTarget(event.target)) return;
-      const store = useGameStore.getState();
+      // Поле переназначения клавиши перехватывает ввод целиком.
+      if (document.documentElement.dataset.hotkeyCapture === "on") return;
 
-      if (event.code === "Space") {
-        event.preventDefault();
-        store.togglePause();
+      const state = useGameStore.getState();
+      if (!state.settingsReady) return;
+
+      const action = actionForEvent(state.settings.hotkeys, event);
+      if (!action) return;
+
+      // Esc: закрывает верхний диалог, иначе открывает меню паузы.
+      if (action === "pauseMenu") {
+        if (state.confirm) {
+          event.preventDefault();
+          state.resolveConfirm(false);
+          return;
+        }
+        if (state.overlay) {
+          event.preventDefault();
+          if (state.overlay === "pause") state.resume();
+          else state.closeOverlay();
+          return;
+        }
+        if (state.screen === "game") {
+          event.preventDefault();
+          state.openPause();
+        }
         return;
       }
 
-      if (event.key === "F3") {
+      if (isTypingTarget(event.target)) return;
+
+      if (action === "debug") {
         event.preventDefault();
-        store.toggleDebug();
+        state.toggleDebug();
         return;
       }
 
-      const speed = SPEED_KEYS[event.key];
+      // Остальные действия имеют смысл только в игре и без открытых диалогов.
+      if (state.screen !== "game") return;
+
+      if (action === "pause") {
+        if (state.overlay) return;
+        event.preventDefault();
+        state.togglePause();
+        return;
+      }
+
+      const speed = SPEED_BY_ACTION[action];
       if (speed !== undefined) {
+        if (state.overlay) return;
         event.preventDefault();
-        store.setSpeed(speed);
+        state.setSpeed(speed);
+        return;
+      }
+
+      if (action === "quickSave") {
+        event.preventDefault();
+        void state.quickSave();
+        return;
+      }
+
+      if (action === "quickLoad") {
+        event.preventDefault();
+        void state.quickLoad();
       }
     };
 

@@ -1,12 +1,17 @@
-import type { Language } from "../i18n";
+import type { Language } from "../i18n/language";
+import type { NumberFormat } from "../state/settings";
 
 const MONEY_LOCALE: Record<Language, string> = { ru: "ru-RU", en: "en-US" };
 
 /** $1 234, $1,2 тыс., $3,4 млн (DESIGN.md, разд. 20). */
-export function formatMoney(value: number, language: Language): string {
+export function formatMoney(value: number, language: Language, mode: NumberFormat = "short"): string {
   const locale = MONEY_LOCALE[language];
   const sign = value < 0 ? "−" : "";
   const abs = Math.abs(value);
+
+  if (mode === "full") {
+    return `${sign}$${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(abs)}`;
+  }
 
   if (abs >= 1_000_000) {
     const millions = abs / 1_000_000;
@@ -31,4 +36,16 @@ export function formatMs(value: number): string {
 
 export function formatClock(hourOfDay: number): string {
   return `${String(hourOfDay).padStart(2, "0")}:00`;
+}
+
+export function formatSavedAt(iso: string, language: Language): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat(MONEY_LOCALE[language], {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }

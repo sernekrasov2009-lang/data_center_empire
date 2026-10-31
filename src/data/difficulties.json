@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "defaultMode": "normal",
+  "modes": [
+    {
+      "id": "calm",
+      "startMoney": 1500,
+      "failureRateMult": 0.5,
+      "eventRateMult": 0.6,
+      "slaPenaltyMult": 0.5,
+      "bankruptcy": "warnings"
+    },
+    {
+      "id": "normal",
+      "startMoney": 800,
+      "failureRateMult": 1,
+      "eventRateMult": 1,
+      "slaPenaltyMult": 1,
+      "bankruptcy": "gameover"
+    },
+    {
+      "id": "hard",
+      "startMoney": 500,
+      "failureRateMult": 1.5,
+      "eventRateMult": 1.4,
+      "slaPenaltyMult": 1.5,
+      "bankruptcy": "gameover"
+    },
+    {
+      "id": "sandbox",
+      "startMoney": 1000000,
+      "failureRateMult": 0,
+      "eventRateMult": 0,
+      "slaPenaltyMult": 0,
+      "bankruptcy": "none"
+    }
+  ]
+}

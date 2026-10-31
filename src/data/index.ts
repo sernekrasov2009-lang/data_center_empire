@@ -1,4 +1,5 @@
 import rawBalance from "./balance.json";
+import rawDifficulties from "./difficulties.json";
 
 /** Скорости игры. 0 — пауза (DESIGN.md, разд. 1). */
 export type Speed = 0 | 1 | 5 | 20 | 60;
@@ -78,6 +79,76 @@ export function validateBalance(data: BalanceFile): string[] {
   }
   if (!Number.isInteger(limits.eventLogSize) || limits.eventLogSize < 10) {
     errors.push("limits.eventLogSize: ожидается целое ≥ 10");
+  }
+
+  return errors;
+}
+
+/* ── Режимы сложности (DESIGN.md, разд. 17) ───────────────────────── */
+
+export type DifficultyId = "calm" | "normal" | "hard" | "sandbox";
+
+export type BankruptcyMode = "warnings" | "gameover" | "none";
+
+export interface DifficultyMode {
+  id: DifficultyId;
+  startMoney: number;
+  /** Множитель вероятности отказов железа. */
+  failureRateMult: number;
+  /** Множитель частоты случайных событий. */
+  eventRateMult: number;
+  /** Множитель штрафов SLA. */
+  slaPenaltyMult: number;
+  bankruptcy: BankruptcyMode;
+}
+
+export interface DifficultiesFile {
+  version: number;
+  defaultMode: DifficultyId;
+  modes: DifficultyMode[];
+}
+
+export const difficulties = rawDifficulties as DifficultiesFile;
+
+export const DIFFICULTY_IDS: readonly DifficultyId[] = ["calm", "normal", "hard", "sandbox"];
+
+export function getDifficulty(id: DifficultyId): DifficultyMode {
+  const mode = difficulties.modes.find((candidate) => candidate.id === id);
+  if (!mode) {
+    throw new Error(`Неизвестный режим сложности: ${id}`);
+  }
+  return mode;
+}
+
+/** Проверка difficulties.json: все режимы на месте, числа в разумных пределах. */
+export function validateDifficulties(data: DifficultiesFile): string[] {
+  const errors: string[] = [];
+
+  const ids = data.modes.map((mode) => mode.id);
+  for (const expected of DIFFICULTY_IDS) {
+    if (!ids.includes(expected)) errors.push(`modes: нет режима ${expected}`);
+  }
+  if (new Set(ids).size !== ids.length) {
+    errors.push("modes: id режимов должны быть уникальны");
+  }
+  if (!ids.includes(data.defaultMode)) {
+    errors.push(`defaultMode: ${data.defaultMode} отсутствует в списке режимов`);
+  }
+
+  for (const mode of data.modes) {
+    if (!(mode.startMoney > 0)) errors.push(`${mode.id}.startMoney: должно быть > 0`);
+    if (!(mode.failureRateMult >= 0 && mode.failureRateMult <= 3)) {
+      errors.push(`${mode.id}.failureRateMult: ожидается 0…3`);
+    }
+    if (!(mode.eventRateMult >= 0 && mode.eventRateMult <= 3)) {
+      errors.push(`${mode.id}.eventRateMult: ожидается 0…3`);
+    }
+    if (!(mode.slaPenaltyMult >= 0 && mode.slaPenaltyMult <= 3)) {
+      errors.push(`${mode.id}.slaPenaltyMult: ожидается 0…3`);
+    }
+    if (!["warnings", "gameover", "none"].includes(mode.bankruptcy)) {
+      errors.push(`${mode.id}.bankruptcy: неизвестное значение`);
+    }
   }
 
   return errors;
