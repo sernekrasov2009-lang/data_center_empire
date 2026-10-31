@@ -94,4 +94,86 @@ describe("миграции сохранений", () => {
     expect(meta.gameVersion).toBe("9.9.9");
     expect(Number.isNaN(Date.parse(meta.savedAt))).toBe(false);
   });
+
+  it("поднимает сохранение версии 2 до 3 с пустой экономикой", () => {
+    const game = migrateGame({ ...legacy, version: 2 });
+    expect(game.version).toBe(GAME_STATE_VERSION);
+    expect(game.economy).toEqual({
+      accrual: { electricity: 0, internet: 0, rent: 0 },
+      reports: [],
+      lifetime: { revenue: 0, expenses: 0 },
+      electricityPriceMult: 1,
+      lowMoneyWarned: false,
+    });
+    expect(game.gameOver).toBeNull();
+  });
+
+  it("сохраняет экономику, отчёты и экран банкротства", () => {
+    const source = createGame({ money: 1200 });
+    const withEconomy = {
+      ...source,
+      money: -2100,
+      economy: {
+        ...source.economy,
+        accrual: { electricity: 1.5, internet: 0, rent: 0 },
+        reports: [
+          {
+            hour: 720,
+            year: 1,
+            month: 1,
+            revenue: 10,
+            expenses: { electricity: 15.5, internet: 20, rent: 0 },
+            totalExpenses: 35.5,
+            net: -25.5,
+            moneyAfter: 1174.5,
+          },
+        ],
+        lifetime: { revenue: 10, expenses: 35.5 },
+        electricityPriceMult: 1.1,
+        lowMoneyWarned: true,
+      },
+      gameOver: { hour: 720, money: -2100 },
+    };
+
+    const game = migrateGame(withEconomy);
+    expect(game.economy.reports).toHaveLength(1);
+    expect(game.economy.reports[0]).toMatchObject({ month: 1, net: -25.5 });
+    expect(game.economy.electricityPriceMult).toBeCloseTo(1.1, 10);
+    expect(game.economy.lowMoneyWarned).toBe(true);
+    expect(game.gameOver).toEqual({ hour: 720, money: -2100 });
+  });
+
+  it("чистит испорченную экономику", () => {
+    const source = createGame();
+    const game = migrateGame({
+      ...source,
+      economy: {
+        accrual: { electricity: -5 },
+        reports: [{ hour: 720, year: -1, month: 99, expenses: { internet: -4 } }],
+        lifetime: { expenses: -100 },
+        electricityPriceMult: 99,
+      },
+    });
+
+    expect(game.economy.accrual.electricity).toBe(0);
+    expect(game.economy.reports[0]).toMatchObject({ year: 1, month: 12 });
+    expect(game.economy.reports[0]!.expenses.internet).toBe(0);
+    expect(game.economy.lifetime.expenses).toBe(0);
+    expect(game.economy.electricityPriceMult).toBe(1.2);
+  });
+
+  it("сохраняет новые виды событий и суммы", () => {
+    const game = migrateGame({
+      ...legacy,
+      version: 3,
+      events: [
+        { id: 1, kind: "billPaid", hour: 720, amount: 35.55 },
+        { id: 2, kind: "bankrupted", hour: 720, amount: -2001 },
+        { id: 3, kind: "unknownKind", hour: 721 },
+      ],
+    });
+    expect(game.events.map((event) => event.kind)).toEqual(["billPaid", "bankrupted"]);
+    expect(game.events[0]!.amount).toBe(35.55);
+    expect(game.events[1]!.amount).toBe(-2001);
+  });
 });

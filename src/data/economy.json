@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "electricity": {
+    "tariffs": [
+      { "id": "home", "pricePerKwh": 0.12 },
+      { "id": "commercial", "pricePerKwh": 0.09 },
+      { "id": "industrial", "pricePerKwh": 0.06 }
+    ],
+    "pue": {
+      "home": 1.8,
+      "garage": 1.6,
+      "colo": 1.5,
+      "datacenter": 1.3
+    },
+    "priceDriftPerYear": 0.05,
+    "priceMinMult": 0.8,
+    "priceMaxMult": 1.2
+  },
+  "internet": {
+    "plans": [
+      { "id": "home-100", "speedMbit": 100, "pricePerMonth": 20 },
+      { "id": "home-300", "speedMbit": 300, "pricePerMonth": 35 }
+    ],
+    "defaultPlanId": "home-100"
+  },
+  "start": {
+    "location": "home",
+    "itLoadW": 100,
+    "internetPlanId": "home-100",
+    "electricityTariffId": "home",
+    "rentPerMonth": 0
+  },
+  "bankruptcy": {
+    "threshold": -2000,
+    "warningAt": 0
+  },
+  "reports": {
+    "historySize": 24
+  }
+}

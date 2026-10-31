@@ -5,6 +5,7 @@ import { useGameStore } from "../state/store";
 import { DebugOverlay } from "./components/DebugOverlay";
 import { Toast } from "./components/Toast";
 import { ConfirmDialog } from "./overlays/ConfirmDialog";
+import { GameOverDialog } from "./overlays/GameOverDialog";
 import { NewGameDialog } from "./overlays/NewGameDialog";
 import { PauseMenu } from "./overlays/PauseMenu";
 import { SettingsDialog } from "./overlays/SettingsDialog";
@@ -21,6 +22,7 @@ function OverlayHost(): React.JSX.Element | null {
   if (overlay === "slots") return <SlotsDialog />;
   if (overlay === "pause") return <PauseMenu />;
   if (overlay === "settings") return <SettingsDialog />;
+  if (overlay === "gameOver") return <GameOverDialog />;
   return null;
 }
 

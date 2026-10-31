@@ -30,6 +30,11 @@ export function useHotkeys(): void {
 
       // Esc: закрывает верхний диалог, иначе открывает меню паузы.
       if (action === "pauseMenu") {
+        // Экран банкротства закрыть нельзя — только загрузить сохранение или выйти.
+        if (state.overlay === "gameOver") {
+          event.preventDefault();
+          return;
+        }
         if (state.confirm) {
           event.preventDefault();
           state.resolveConfirm(false);
@@ -76,6 +81,7 @@ export function useHotkeys(): void {
 
       if (action === "quickSave") {
         event.preventDefault();
+        if (state.game.gameOver) return;
         void state.quickSave();
         return;
       }

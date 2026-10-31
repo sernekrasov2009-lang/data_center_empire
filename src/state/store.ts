@@ -20,9 +20,10 @@ import {
 } from "../sim";
 import { withBinding, type HotkeyAction } from "./hotkeys";
 import { createDefaultSettings, mergeSettings, type Settings } from "./settings";
+import { formatMoney } from "../ui/format";
 
 export type Screen = "menu" | "game";
-export type Overlay = "newGame" | "slots" | "pause" | "settings" | null;
+export type Overlay = "newGame" | "slots" | "pause" | "settings" | "gameOver" | null;
 export type SlotMode = "save" | "load";
 export type ToastKind = "info" | "warn" | "error";
 
@@ -188,6 +189,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       const parsed = parseSave(data, slot);
       autosaveClockMs = 0;
       applyGame(setPaused(parsed.game, true));
+      if (parsed.game.gameOver) set({ overlay: "gameOver" });
       if (parsed.migratedFrom !== null) {
         notify("toast.migrated", { version: parsed.migratedFrom }, "warn");
       } else {
@@ -276,7 +278,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     openSlots: (mode) => set({ overlay: "slots", slotMode: mode, returnTo: get().overlay }),
     openPause: () => {
       const { screen, game } = get();
-      if (screen !== "game") return;
+      if (screen !== "game" || game.gameOver) return;
       frameAccumulatorMs = 0;
       set({ overlay: "pause", returnTo: null, game: setPaused(game, true) });
     },
@@ -284,6 +286,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     closeOverlay: () => set({ overlay: get().returnTo, returnTo: null }),
     resume: () => {
       const { game } = get();
+      if (game.gameOver) return;
       frameAccumulatorMs = 0;
       set({ overlay: null, returnTo: null, game: setPaused(game, false) });
     },
@@ -334,7 +337,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     },
 
     quickSave: async () => {
-      if (get().screen !== "game") return;
+      if (get().screen !== "game" || get().game.gameOver) return;
       await get().saveSlot("quicksave");
     },
 
@@ -453,7 +456,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     advance: (realMs: number) => {
       const { game, screen, overlay, settings, dirty } = get();
       // Открытый диалог останавливает время, но не меняет флаг паузы.
-      if (screen !== "game" || overlay !== null || game.time.paused || game.time.speed === 0) {
+      if (screen !== "game" || overlay !== null || game.gameOver || game.time.paused || game.time.speed === 0) {
         frameAccumulatorMs = 0;
         return;
       }
@@ -492,15 +495,31 @@ export const useGameStore = create<GameStore>((set, get) => {
         },
       });
 
-      if (settings.game.autosave === "month" && result.events.some((event) => event.kind === "monthClosed")) {
+      if (
+        !result.state.gameOver &&
+        settings.game.autosave === "month" &&
+        result.events.some((event) => event.kind === "monthClosed")
+      ) {
         void autosave();
       }
-      if (settings.game.autosave === "5min") {
+      if (!result.state.gameOver && settings.game.autosave === "5min") {
         autosaveClockMs += frameMs;
         if (autosaveClockMs >= AUTOSAVE_INTERVAL_MS) {
           autosaveClockMs = 0;
           void autosave();
         }
+      }
+
+      const bill = result.events.find((event) => event.kind === "billPaid");
+      if (bill) {
+        notify("toast.bill", {
+          amount: formatMoney(-(bill.amount ?? 0), settings.game.language, settings.game.numberFormat),
+        });
+      }
+
+      if (result.state.gameOver && !game.gameOver) {
+        frameAccumulatorMs = 0;
+        set({ overlay: "gameOver", returnTo: null });
       }
     },
 

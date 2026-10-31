@@ -1,5 +1,6 @@
 import rawBalance from "./balance.json";
 import rawDifficulties from "./difficulties.json";
+import rawEconomy from "./economy.json";
 
 /** Скорости игры. 0 — пауза (DESIGN.md, разд. 1). */
 export type Speed = 0 | 1 | 5 | 20 | 60;
@@ -149,6 +150,152 @@ export function validateDifficulties(data: DifficultiesFile): string[] {
     if (!["warnings", "gameover", "none"].includes(mode.bankruptcy)) {
       errors.push(`${mode.id}.bankruptcy: неизвестное значение`);
     }
+  }
+
+  return errors;
+}
+
+/* ── Экономика: тарифы, PUE, интернет, стартовое состояние ────────── */
+
+export type LocationKind = "home" | "garage" | "colo" | "datacenter";
+
+export interface ElectricityTariff {
+  id: string;
+  /** Цена за кВт·ч в долларах. */
+  pricePerKwh: number;
+}
+
+export interface InternetPlan {
+  id: string;
+  speedMbit: number;
+  pricePerMonth: number;
+}
+
+export interface EconomyFile {
+  version: number;
+  electricity: {
+    tariffs: ElectricityTariff[];
+    /** PUE: во сколько раз общее потребление больше ИТ-нагрузки. */
+    pue: Record<LocationKind, number>;
+    /** Случайное блуждание цены за год (доля, например 0.05 = ±5%). */
+    priceDriftPerYear: number;
+    priceMinMult: number;
+    priceMaxMult: number;
+  };
+  internet: {
+    plans: InternetPlan[];
+    defaultPlanId: string;
+  };
+  start: {
+    location: LocationKind;
+    /** Потребление старого домашнего ПК, Вт (до этапа железа). */
+    itLoadW: number;
+    internetPlanId: string;
+    electricityTariffId: string;
+    rentPerMonth: number;
+  };
+  bankruptcy: {
+    /** Деньги ниже этого значения при отсутствии клиентов — конец игры. */
+    threshold: number;
+    /** Порог предупреждения о минусе. */
+    warningAt: number;
+  };
+  reports: {
+    /** Сколько месячных отчётов хранится в состоянии. */
+    historySize: number;
+  };
+}
+
+export const economy = rawEconomy as EconomyFile;
+
+export const LOCATION_KINDS: readonly LocationKind[] = ["home", "garage", "colo", "datacenter"];
+
+export function getInternetPlan(id: string): InternetPlan {
+  const plan = economy.internet.plans.find((candidate) => candidate.id === id);
+  if (!plan) throw new Error(`Неизвестный тариф интернета: ${id}`);
+  return plan;
+}
+
+export function getElectricityTariff(id: string): ElectricityTariff {
+  const tariff = economy.electricity.tariffs.find((candidate) => candidate.id === id);
+  if (!tariff) throw new Error(`Неизвестный тариф на электричество: ${id}`);
+  return tariff;
+}
+
+/** Проверка economy.json: ссылки существуют, числа в разумных пределах. */
+export function validateEconomy(data: EconomyFile): string[] {
+  const errors: string[] = [];
+
+  if (!Number.isInteger(data.version) || data.version < 1) {
+    errors.push("version: ожидается целое число ≥ 1");
+  }
+
+  const tariffIds = data.electricity.tariffs.map((tariff) => tariff.id);
+  if (new Set(tariffIds).size !== tariffIds.length) {
+    errors.push("electricity.tariffs: id тарифов должны быть уникальны");
+  }
+  if (tariffIds.length === 0) {
+    errors.push("electricity.tariffs: нужен хотя бы один тариф");
+  }
+  for (const tariff of data.electricity.tariffs) {
+    if (!(tariff.pricePerKwh > 0) || tariff.pricePerKwh > 1) {
+      errors.push(`electricity.tariffs.${tariff.id}.pricePerKwh: ожидается 0…1`);
+    }
+  }
+  for (const kind of LOCATION_KINDS) {
+    const pue = data.electricity.pue[kind];
+    if (!(pue >= 1) || pue > 3) {
+      errors.push(`electricity.pue.${kind}: ожидается 1…3`);
+    }
+  }
+  if (!(data.electricity.priceDriftPerYear >= 0) || data.electricity.priceDriftPerYear > 0.2) {
+    errors.push("electricity.priceDriftPerYear: ожидается 0…0,2");
+  }
+  if (!(data.electricity.priceMinMult > 0 && data.electricity.priceMinMult <= 1)) {
+    errors.push("electricity.priceMinMult: ожидается 0…1");
+  }
+  if (!(data.electricity.priceMaxMult >= 1 && data.electricity.priceMaxMult <= 2)) {
+    errors.push("electricity.priceMaxMult: ожидается 1…2");
+  }
+
+  const planIds = data.internet.plans.map((plan) => plan.id);
+  if (new Set(planIds).size !== planIds.length) {
+    errors.push("internet.plans: id тарифов должны быть уникальны");
+  }
+  if (!planIds.includes(data.internet.defaultPlanId)) {
+    errors.push(`internet.defaultPlanId: ${data.internet.defaultPlanId} отсутствует в списке`);
+  }
+  for (const plan of data.internet.plans) {
+    if (!(plan.speedMbit > 0)) errors.push(`internet.plans.${plan.id}.speedMbit: должно быть > 0`);
+    if (!(plan.pricePerMonth >= 0)) errors.push(`internet.plans.${plan.id}.pricePerMonth: должно быть ≥ 0`);
+  }
+  if (!planIds.includes(data.start.internetPlanId)) {
+    errors.push(`start.internetPlanId: ${data.start.internetPlanId} отсутствует в списке`);
+  }
+  if (!tariffIds.includes(data.start.electricityTariffId)) {
+    errors.push(`start.electricityTariffId: ${data.start.electricityTariffId} отсутствует в списке`);
+  }
+  if (!LOCATION_KINDS.includes(data.start.location)) {
+    errors.push(`start.location: неизвестная локация ${data.start.location}`);
+  }
+  if (!(data.start.itLoadW > 0) || data.start.itLoadW > 2000) {
+    errors.push("start.itLoadW: ожидается 0…2000 Вт");
+  }
+  if (!(data.start.rentPerMonth >= 0)) {
+    errors.push("start.rentPerMonth: должно быть ≥ 0");
+  }
+
+  if (!(data.bankruptcy.threshold < 0)) {
+    errors.push("bankruptcy.threshold: ожидается отрицательное число");
+  }
+  if (!(data.bankruptcy.warningAt <= 0)) {
+    errors.push("bankruptcy.warningAt: ожидается ≤ 0");
+  }
+  if (data.bankruptcy.warningAt <= data.bankruptcy.threshold) {
+    errors.push("bankruptcy.warningAt: должен быть выше порога банкротства");
+  }
+  if (!Number.isInteger(data.reports.historySize) || data.reports.historySize < 6) {
+    errors.push("reports.historySize: ожидается целое ≥ 6");
   }
 
   return errors;

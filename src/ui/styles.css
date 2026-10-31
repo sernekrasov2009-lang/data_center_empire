@@ -1519,6 +1519,242 @@ button {
   white-space: nowrap;
 }
 
+/* ── Экономика (этап 2) ─────────────────────────────────────────── */
+
+.stat__value--money[data-state="danger"] {
+  color: var(--danger);
+  text-shadow: 0 0 14px rgba(255, 95, 121, 0.45);
+}
+
+.panel__value--expense {
+  color: var(--warn);
+  text-shadow: 0 0 14px rgba(255, 207, 92, 0.28);
+}
+
+.panel__value[data-state="danger"] {
+  color: var(--danger);
+  text-shadow: 0 0 14px rgba(255, 95, 121, 0.4);
+}
+
+.econ-banner {
+  grid-column: span 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 207, 92, 0.45);
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: rgba(255, 207, 92, 0.07);
+}
+
+.econ-banner[data-kind="danger"] {
+  border-color: rgba(255, 95, 121, 0.5);
+  background: rgba(255, 95, 121, 0.09);
+}
+
+.econ-banner__title {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--warn);
+}
+
+.econ-banner[data-kind="danger"] .econ-banner__title {
+  color: var(--danger);
+}
+
+.econ-banner__text {
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.econ-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.econ-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.econ-row__label {
+  color: var(--muted);
+}
+
+.econ-row__value {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: #eaf4ff;
+  white-space: nowrap;
+}
+
+.econ-row__hint {
+  margin: -2px 0 6px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.econ-row--total {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 13px;
+}
+
+.econ-row--total .econ-row__label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.econ-row--total .econ-row__value {
+  color: var(--warn);
+  font-size: 15px;
+}
+
+.month-bar {
+  margin-top: 12px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(27, 43, 69, 0.8);
+  overflow: hidden;
+}
+
+.month-bar > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--warn), var(--danger));
+  transition: width 200ms linear;
+}
+
+.forecast-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.forecast-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: rgba(16, 28, 47, 0.45);
+  font-size: 12px;
+}
+
+.forecast-row__label {
+  color: var(--muted);
+}
+
+.forecast-row__value {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ok);
+}
+
+.forecast-row[data-negative="true"] .forecast-row__value {
+  color: var(--danger);
+}
+
+.bill-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bill {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 12px;
+}
+
+.bill:last-child {
+  border-bottom: none;
+}
+
+.bill__month {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bill__net {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--danger);
+  white-space: nowrap;
+}
+
+.bill__after {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.gameover__lead {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.gameover__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 18px;
+  margin: 0 0 12px;
+}
+
+.gameover__grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: rgba(16, 28, 47, 0.45);
+}
+
+.gameover__grid dt {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.gameover__grid dd {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: #eaf4ff;
+}
+
+.gameover__money {
+  color: var(--danger) !important;
+}
+
 /* Доступность и масштаб */
 
 [data-animations="off"] *,

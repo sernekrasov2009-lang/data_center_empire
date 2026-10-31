@@ -31,7 +31,9 @@ export function TopBar(): React.JSX.Element {
 
       <div className="stat">
         <span className="stat__label">{t("hud.money")}</span>
-        <span className="stat__value stat__value--money">{formatMoney(money, language, numberFormat)}</span>
+        <span className="stat__value stat__value--money" data-state={money < 0 ? "danger" : "ok"}>
+          {formatMoney(money, language, numberFormat)}
+        </span>
       </div>
 
       <div className="stat">

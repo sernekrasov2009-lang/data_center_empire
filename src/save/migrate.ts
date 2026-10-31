@@ -1,6 +1,6 @@
-import { GAME_SPEEDS, DIFFICULTY_IDS, type DifficultyId } from "../data";
-import { DEFAULT_COMPANY_NAME, GAME_STATE_VERSION, createRng } from "../sim";
-import type { GameState, SimEvent } from "../sim";
+import { GAME_SPEEDS, DIFFICULTY_IDS, economy as economyData, type DifficultyId } from "../data";
+import { DEFAULT_COMPANY_NAME, GAME_STATE_VERSION, createEconomy, createRng } from "../sim";
+import type { EconomyState, ExpenseBreakdown, GameState, MonthlyReport, SimEvent } from "../sim";
 import { SAVE_FORMAT, type SaveEnvelope, type SaveMeta, type SaveSlotId } from "./types";
 
 /** Ошибка чтения сохранения: показывается игроку понятным текстом. */
@@ -25,20 +25,92 @@ function asDifficulty(value: unknown): DifficultyId {
     : "normal";
 }
 
+const EVENT_KINDS: readonly SimEvent["kind"][] = [
+  "dayStarted",
+  "monthClosed",
+  "yearClosed",
+  "billPaid",
+  "electricityPriceChanged",
+  "moneyLow",
+  "bankrupted",
+];
+
 function asEvents(value: unknown): SimEvent[] {
   if (!Array.isArray(value)) return [];
   const events: SimEvent[] = [];
   for (const item of value) {
     if (!isRecord(item)) continue;
     const kind = item.kind;
-    if (kind !== "dayStarted" && kind !== "monthClosed" && kind !== "yearClosed") continue;
-    events.push({
+    if (typeof kind !== "string" || !(EVENT_KINDS as readonly string[]).includes(kind)) continue;
+    const event: SimEvent = {
       id: asNumber(item.id, 0),
-      kind,
+      kind: kind as SimEvent["kind"],
       hour: Math.max(0, Math.floor(asNumber(item.hour, 0))),
-    });
+    };
+    if (typeof item.amount === "number" && Number.isFinite(item.amount)) event.amount = item.amount;
+    events.push(event);
   }
   return events;
+}
+
+function asExpenses(value: unknown): ExpenseBreakdown {
+  const source = isRecord(value) ? value : {};
+  return {
+    electricity: Math.max(0, asNumber(source.electricity, 0)),
+    internet: Math.max(0, asNumber(source.internet, 0)),
+    rent: Math.max(0, asNumber(source.rent, 0)),
+  };
+}
+
+function asReport(value: unknown): MonthlyReport | null {
+  if (!isRecord(value)) return null;
+  const expenses = asExpenses(value.expenses);
+  const totalExpenses = Math.max(0, asNumber(value.totalExpenses, expenses.electricity + expenses.internet + expenses.rent));
+  const revenue = asNumber(value.revenue, 0);
+  return {
+    hour: Math.max(0, Math.floor(asNumber(value.hour, 0))),
+    year: Math.max(1, Math.floor(asNumber(value.year, 1))),
+    month: Math.min(12, Math.max(1, Math.floor(asNumber(value.month, 1)))),
+    revenue,
+    expenses,
+    totalExpenses,
+    net: asNumber(value.net, revenue - totalExpenses),
+    moneyAfter: asNumber(value.moneyAfter, 0),
+  };
+}
+
+function asEconomy(value: unknown): EconomyState {
+  if (!isRecord(value)) return createEconomy();
+
+  const reports = Array.isArray(value.reports)
+    ? value.reports
+        .map(asReport)
+        .filter((report): report is MonthlyReport => report !== null)
+        .slice(-economyData.reports.historySize)
+    : [];
+
+  const lifetime = isRecord(value.lifetime) ? value.lifetime : {};
+  const { priceMinMult, priceMaxMult } = economyData.electricity;
+  const priceMult = asNumber(value.electricityPriceMult, 1);
+
+  return {
+    accrual: asExpenses(value.accrual),
+    reports,
+    lifetime: {
+      revenue: asNumber(lifetime.revenue, 0),
+      expenses: Math.max(0, asNumber(lifetime.expenses, 0)),
+    },
+    electricityPriceMult: Math.min(priceMaxMult, Math.max(priceMinMult, priceMult)),
+    lowMoneyWarned: value.lowMoneyWarned === true,
+  };
+}
+
+function asGameOver(value: unknown): GameState["gameOver"] {
+  if (!isRecord(value)) return null;
+  return {
+    hour: Math.max(0, Math.floor(asNumber(value.hour, 0))),
+    money: asNumber(value.money, 0),
+  };
 }
 
 /**
@@ -83,6 +155,8 @@ export function migrateGame(raw: unknown): GameState {
     money: asNumber(raw.money, 0),
     companyName: typeof raw.companyName === "string" && raw.companyName.trim() ? raw.companyName : DEFAULT_COMPANY_NAME,
     difficulty: asDifficulty(raw.difficulty),
+    economy: asEconomy(raw.economy),
+    gameOver: asGameOver(raw.gameOver),
     stats: { ticks: Math.max(0, Math.floor(isRecord(raw.stats) ? asNumber(raw.stats.ticks, 0) : 0)) },
     events: asEvents(raw.events),
     nextEventId: Math.max(1, Math.floor(asNumber(raw.nextEventId, 1))),

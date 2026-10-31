@@ -10,7 +10,8 @@ export function formatMoney(value: number, language: Language, mode: NumberForma
   const abs = Math.abs(value);
 
   if (mode === "full") {
-    return `${sign}$${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(abs)}`;
+    const digits = abs < 1000 ? 2 : 0;
+    return `${sign}$${new Intl.NumberFormat(locale, { maximumFractionDigits: digits }).format(abs)}`;
   }
 
   if (abs >= 1_000_000) {
@@ -23,11 +24,21 @@ export function formatMoney(value: number, language: Language, mode: NumberForma
     const text = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(thousands);
     return `${sign}$${text} ${language === "ru" ? "тыс." : "K"}`;
   }
-  return `${sign}$${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(abs)}`;
+  return `${sign}$${new Intl.NumberFormat(locale, { maximumFractionDigits: abs < 1000 ? 2 : 0 }).format(abs)}`;
 }
 
 export function formatInt(value: number, language: Language): string {
   return new Intl.NumberFormat(MONEY_LOCALE[language], { maximumFractionDigits: 0 }).format(value);
+}
+
+/** Точная цена маленьких величин: $0,12 за кВт·ч. */
+export function formatMoneyExact(value: number, language: Language): string {
+  const sign = value < 0 ? "−" : "";
+  const text = new Intl.NumberFormat(MONEY_LOCALE[language], {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 3,
+  }).format(Math.abs(value));
+  return `${sign}$${text}`;
 }
 
 export function formatMs(value: number): string {

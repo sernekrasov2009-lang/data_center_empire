@@ -2,15 +2,20 @@ import { useT } from "../../i18n";
 import { getGameDate } from "../../sim";
 import { useGameStore } from "../../state/store";
 import { formatClock, formatMoney } from "../format";
-
-const KPI_PLACEHOLDERS = ["kpi.revenue", "kpi.expenses", "kpi.clients", "kpi.reputation"] as const;
+import {
+  EconomyBanner,
+  ExpensesPanel,
+  ForecastPanel,
+  ReportsPanel,
+  ThisMonthPanel,
+} from "./EconomyPanels";
 
 const CHECKLIST = [
-  "dash.check.menu",
-  "dash.check.saves",
-  "dash.check.settings",
-  "dash.check.hotkeys",
-  "dash.check.clock",
+  "dash.check.economy",
+  "dash.check.electricity",
+  "dash.check.reports",
+  "dash.check.forecast",
+  "dash.check.bankruptcy",
 ] as const;
 
 export function DashboardScreen(): React.JSX.Element {
@@ -21,10 +26,13 @@ export function DashboardScreen(): React.JSX.Element {
   const money = useGameStore((state) => state.game.money);
   const companyName = useGameStore((state) => state.game.companyName);
   const difficulty = useGameStore((state) => state.game.difficulty);
+  const lastReport = useGameStore((state) => state.game.economy.reports.at(-1) ?? null);
   const date = getGameDate(hour);
 
   return (
     <div className="dashboard">
+      <EconomyBanner />
+
       <section className="panel panel--clock">
         <div className="panel__label">{t("dash.clock")}</div>
         <div className="clock__time">{formatClock(date.hourOfDay)}</div>
@@ -40,21 +48,27 @@ export function DashboardScreen(): React.JSX.Element {
 
       <section className="panel">
         <div className="panel__label">{t("hud.money")}</div>
-        <div className="panel__value">{formatMoney(money, language, numberFormat)}</div>
-        <p className="panel__hint">{t("dash.pending")}</p>
-      </section>
-
-      <section className="panel">
-        <div className="panel__label">{t("dash.company")}</div>
-        <div className="panel__value panel__value--text">{companyName}</div>
+        <div className="panel__value" data-state={money < 0 ? "danger" : "ok"}>
+          {formatMoney(money, language, numberFormat)}
+        </div>
         <p className="panel__hint">
-          {t("dash.difficulty")}: {t(`difficulty.${difficulty}`)}
+          {lastReport
+            ? t("dash.lastMonth", { net: formatMoney(lastReport.net, language, numberFormat) })
+            : t("dash.noReports")}
+        </p>
+        <p className="panel__hint">
+          {t("dash.company")}: {companyName} · {t(`difficulty.${difficulty}`)}
         </p>
       </section>
 
-      <section className="panel">
+      <ThisMonthPanel />
+      <ExpensesPanel />
+      <ForecastPanel />
+      <ReportsPanel />
+
+      <section className="panel panel--wide">
         <div className="panel__label">{t("dash.stage")}</div>
-        <ul className="checklist checklist--single">
+        <ul className="checklist">
           {CHECKLIST.map((key) => (
             <li key={key}>
               <span className="checklist__mark" aria-hidden="true">
@@ -64,23 +78,7 @@ export function DashboardScreen(): React.JSX.Element {
             </li>
           ))}
         </ul>
-      </section>
-
-      <section className="panel panel--wide">
-        <div className="panel__label">{t("dash.next")}</div>
-        <p className="panel__text">{t("dash.next.hint")}</p>
-      </section>
-
-      <section className="panel panel--wide panel--kpi">
-        <div className="panel__label">{t("dash.pending")}</div>
-        <div className="kpi-grid">
-          {KPI_PLACEHOLDERS.map((key) => (
-            <div key={key} className="kpi">
-              <span className="kpi__label">{t(key)}</span>
-              <span className="kpi__value">{t("common.empty")}</span>
-            </div>
-          ))}
-        </div>
+        <p className="panel__hint">{t("dash.next.hint")}</p>
       </section>
     </div>
   );

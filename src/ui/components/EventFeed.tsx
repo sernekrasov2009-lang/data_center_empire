@@ -1,7 +1,7 @@
 import { useT } from "../../i18n";
 import { getGameDate } from "../../sim";
 import { useGameStore } from "../../state/store";
-import { formatClock } from "../format";
+import { formatClock, formatMoney, formatMoneyExact } from "../format";
 
 /** Событие «закрыт месяц» приходит в первый час нового месяца, поэтому отступаем на день. */
 function closedMonthLabel(eventHour: number): { month: number; year: number } {
@@ -11,6 +11,8 @@ function closedMonthLabel(eventHour: number): { month: number; year: number } {
 
 export function EventFeed(): React.JSX.Element {
   const t = useT();
+  const language = useGameStore((state) => state.settings.game.language);
+  const numberFormat = useGameStore((state) => state.settings.game.numberFormat);
   const events = useGameStore((state) => state.events);
 
   return (
@@ -32,6 +34,20 @@ export function EventFeed(): React.JSX.Element {
                   {event.kind === "dayStarted" && t("feed.dayStarted", { day: date.totalDays + 1 })}
                   {event.kind === "monthClosed" && t("feed.monthClosed", { month: closed.month, year: closed.year })}
                   {event.kind === "yearClosed" && t("feed.yearClosed", { year: closed.year })}
+                  {event.kind === "billPaid" &&
+                    t("feed.billPaid", {
+                      amount: formatMoney(-(event.amount ?? 0), language, numberFormat),
+                    })}
+                  {event.kind === "electricityPriceChanged" &&
+                    t("feed.tariff", { price: formatMoneyExact(event.amount ?? 0, language) })}
+                  {event.kind === "moneyLow" &&
+                    t("feed.moneyLow", {
+                      money: formatMoney(event.amount ?? 0, language, numberFormat),
+                    })}
+                  {event.kind === "bankrupted" &&
+                    t("feed.bankrupted", {
+                      money: formatMoney(event.amount ?? 0, language, numberFormat),
+                    })}
                 </span>
               </li>
             );
