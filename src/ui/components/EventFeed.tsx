@@ -1,3 +1,4 @@
+import { findComponent } from "../../data";
 import { useT } from "../../i18n";
 import { getGameDate } from "../../sim";
 import { useGameStore } from "../../state/store";
@@ -48,6 +49,25 @@ export function EventFeed(): React.JSX.Element {
                     t("feed.bankrupted", {
                       money: formatMoney(event.amount ?? 0, language, numberFormat),
                     })}
+                  {event.kind === "orderArrived" &&
+                    t("feed.orderArrived", {
+                      amount: formatMoney(event.amount ?? 0, language, numberFormat),
+                    })}
+                  {event.kind === "buildCompleted" &&
+                    t("feed.buildCompleted", {
+                      amount: formatMoney(event.amount ?? 0, language, numberFormat),
+                    })}
+                  {event.kind === "partFailed" &&
+                    t("feed.partFailed", {
+                      part: event.ref ? (findComponent(event.ref)?.name ?? event.ref) : "—",
+                    })}
+                  {event.kind === "partRepaired" &&
+                    t("feed.partRepaired", {
+                      part: event.ref ? (findComponent(event.ref)?.name ?? event.ref) : "—",
+                    })}
+                  {event.kind === "usedMarketUpdated" && t("feed.usedMarketUpdated")}
+                  {event.kind === "marketPriceChanged" &&
+                    t("feed.marketPriceChanged", { mult: (event.amount ?? 1).toFixed(3) })}
                 </span>
               </li>
             );

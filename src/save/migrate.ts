@@ -1,6 +1,32 @@
-import { GAME_SPEEDS, DIFFICULTY_IDS, economy as economyData, type DifficultyId } from "../data";
-import { DEFAULT_COMPANY_NAME, GAME_STATE_VERSION, createEconomy, createRng } from "../sim";
-import type { EconomyState, ExpenseBreakdown, GameState, MonthlyReport, SimEvent } from "../sim";
+import {
+  GAME_SPEEDS,
+  DIFFICULTY_IDS,
+  economy as economyData,
+  findComponent,
+  hardware as hardwareData,
+  type DifficultyId,
+} from "../data";
+import {
+  DEFAULT_COMPANY_NAME,
+  GAME_STATE_VERSION,
+  createEconomy,
+  createHardware,
+  createRng,
+  refreshUsedMarket,
+} from "../sim";
+import type {
+  BuildPart,
+  EconomyState,
+  ExpenseBreakdown,
+  GameState,
+  HardwareBuild,
+  HardwareOrder,
+  HardwareState,
+  MonthlyReport,
+  PartInstance,
+  SimEvent,
+  UsedLot,
+} from "../sim";
 import { SAVE_FORMAT, type SaveEnvelope, type SaveMeta, type SaveSlotId } from "./types";
 
 /** Ошибка чтения сохранения: показывается игроку понятным текстом. */
@@ -33,6 +59,12 @@ const EVENT_KINDS: readonly SimEvent["kind"][] = [
   "electricityPriceChanged",
   "moneyLow",
   "bankrupted",
+  "orderArrived",
+  "buildCompleted",
+  "partFailed",
+  "partRepaired",
+  "usedMarketUpdated",
+  "marketPriceChanged",
 ];
 
 function asEvents(value: unknown): SimEvent[] {
@@ -48,6 +80,7 @@ function asEvents(value: unknown): SimEvent[] {
       hour: Math.max(0, Math.floor(asNumber(item.hour, 0))),
     };
     if (typeof item.amount === "number" && Number.isFinite(item.amount)) event.amount = item.amount;
+    if (typeof item.ref === "string" && item.ref) event.ref = item.ref;
     events.push(event);
   }
   return events;
@@ -113,6 +146,189 @@ function asGameOver(value: unknown): GameState["gameOver"] {
   };
 }
 
+function asOptionalHour(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.floor(value)
+    : null;
+}
+
+function asPart(value: unknown): PartInstance | null {
+  if (!isRecord(value)) return null;
+  const componentId = typeof value.componentId === "string" ? value.componentId : "";
+  if (!findComponent(componentId)) return null;
+  const id = Math.floor(asNumber(value.id, 0));
+  if (id < 1) return null;
+
+  return {
+    id,
+    componentId,
+    condition: value.condition === "used" ? "used" : "new",
+    acquiredHour: Math.max(0, Math.floor(asNumber(value.acquiredHour, 0))),
+    purchasePrice: Math.max(0, asNumber(value.purchasePrice, 0)),
+    orderId:
+      typeof value.orderId === "number" && Number.isFinite(value.orderId)
+        ? Math.max(1, Math.floor(value.orderId))
+        : null,
+    defectAtHour: asOptionalHour(value.defectAtHour),
+  };
+}
+
+function asBuildPart(value: unknown): BuildPart | null {
+  if (!isRecord(value)) return null;
+  const componentId = typeof value.componentId === "string" ? value.componentId : "";
+  if (!findComponent(componentId)) return null;
+
+  return {
+    componentId,
+    condition: value.condition === "used" ? "used" : "new",
+    purchasePrice: Math.max(0, asNumber(value.purchasePrice, 0)),
+    installedAtHour: Math.max(0, Math.floor(asNumber(value.installedAtHour, 0))),
+    defectAtHour: asOptionalHour(value.defectAtHour),
+    broken: value.broken === true,
+    repairDoneHour: asOptionalHour(value.repairDoneHour),
+  };
+}
+
+function asBuild(value: unknown): HardwareBuild | null {
+  if (!isRecord(value)) return null;
+  const id = Math.floor(asNumber(value.id, 0));
+  if (id < 1) return null;
+  const parts = Array.isArray(value.parts)
+    ? value.parts.map(asBuildPart).filter((part): part is BuildPart => part !== null)
+    : [];
+  if (parts.length === 0) return null;
+
+  const startedAtHour = Math.max(0, Math.floor(asNumber(value.startedAtHour, 0)));
+  const readyAtHour = Math.max(startedAtHour, Math.floor(asNumber(value.readyAtHour, startedAtHour)));
+  const status = value.status === "assembling" ? "assembling" : "ready";
+  return {
+    id,
+    starter: value.starter === true,
+    status,
+    startedAtHour,
+    readyAtHour,
+    parts,
+  };
+}
+
+function asOrder(value: unknown): HardwareOrder | null {
+  if (!isRecord(value)) return null;
+  const id = Math.floor(asNumber(value.id, 0));
+  if (id < 1) return null;
+
+  const lines = Array.isArray(value.lines)
+    ? value.lines
+        .map((line) => {
+          if (!isRecord(line)) return null;
+          const componentId = typeof line.componentId === "string" ? line.componentId : "";
+          if (!findComponent(componentId)) return null;
+          const quantity = Math.floor(asNumber(line.quantity, 0));
+          if (quantity < 1 || quantity > 99) return null;
+          return {
+            componentId,
+            quantity,
+            unitPrice: Math.max(0, asNumber(line.unitPrice, 0)),
+            condition: line.condition === "used" ? ("used" as const) : ("new" as const),
+          };
+        })
+        .filter((line): line is NonNullable<typeof line> => line !== null)
+    : [];
+  if (lines.length === 0) return null;
+
+  const subtotal = Math.max(
+    0,
+    asNumber(value.subtotal, lines.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0)),
+  );
+  const shipping = Math.max(0, asNumber(value.shipping, 0));
+  const statuses: readonly HardwareOrder["status"][] = [
+    "inTransit",
+    "delivered",
+    "cancelled",
+    "returned",
+  ];
+  const status = typeof value.status === "string" && (statuses as readonly string[]).includes(value.status)
+    ? (value.status as HardwareOrder["status"])
+    : "delivered";
+
+  return {
+    id,
+    kind: value.kind === "used" ? "used" : "new",
+    lines,
+    subtotal,
+    shipping,
+    total: Math.max(0, asNumber(value.total, subtotal + shipping)),
+    status,
+    orderedAtHour: Math.max(0, Math.floor(asNumber(value.orderedAtHour, 0))),
+    arriveAtHour: Math.max(0, Math.floor(asNumber(value.arriveAtHour, 0))),
+    deliveredAtHour: asOptionalHour(value.deliveredAtHour),
+    lotId:
+      typeof value.lotId === "number" && Number.isFinite(value.lotId)
+        ? Math.max(1, Math.floor(value.lotId))
+        : null,
+  };
+}
+
+function asUsedLot(value: unknown): UsedLot | null {
+  if (!isRecord(value)) return null;
+  const componentId = typeof value.componentId === "string" ? value.componentId : "";
+  if (!findComponent(componentId)) return null;
+  const id = Math.floor(asNumber(value.id, 0));
+  const price = asNumber(value.price, 0);
+  if (id < 1 || price <= 0) return null;
+
+  const listedAtHour = Math.max(0, Math.floor(asNumber(value.listedAtHour, 0)));
+  return {
+    id,
+    componentId,
+    price,
+    discount: Math.min(1, Math.max(0, asNumber(value.discount, 0))),
+    listedAtHour,
+    expiresAtHour: Math.max(
+      listedAtHour,
+      Math.floor(asNumber(value.expiresAtHour, listedAtHour + hardwareData.market.usedLotDays * 24)),
+    ),
+  };
+}
+
+function asHardware(value: unknown): HardwareState {
+  if (!isRecord(value)) return createHardware();
+
+  const parts = Array.isArray(value.parts)
+    ? value.parts.map(asPart).filter((part): part is PartInstance => part !== null)
+    : [];
+  const builds = Array.isArray(value.builds)
+    ? value.builds.map(asBuild).filter((build): build is HardwareBuild => build !== null)
+    : [];
+  const orders = Array.isArray(value.orders)
+    ? value.orders.map(asOrder).filter((order): order is HardwareOrder => order !== null)
+    : [];
+  const usedLots = Array.isArray(value.usedLots)
+    ? value.usedLots.map(asUsedLot).filter((lot): lot is UsedLot => lot !== null)
+    : [];
+
+  if (builds.length === 0 && parts.length === 0 && orders.length === 0) {
+    return createHardware();
+  }
+
+  const maxPart = parts.reduce((max, part) => Math.max(max, part.id), 0);
+  const maxBuild = builds.reduce((max, build) => Math.max(max, build.id), 0);
+  const maxOrder = orders.reduce((max, order) => Math.max(max, order.id), 0);
+  const maxLot = usedLots.reduce((max, lot) => Math.max(max, lot.id), 0);
+
+  return {
+    parts,
+    builds,
+    orders,
+    usedLots,
+    marketPriceMult: Math.min(1.5, Math.max(0.5, asNumber(value.marketPriceMult, 1))),
+    lastUsedMarketHour: Math.max(-1, Math.floor(asNumber(value.lastUsedMarketHour, -1))),
+    nextPartId: Math.max(1, maxPart + 1, Math.floor(asNumber(value.nextPartId, 1))),
+    nextBuildId: Math.max(1, maxBuild + 1, Math.floor(asNumber(value.nextBuildId, 1))),
+    nextOrderId: Math.max(1, maxOrder + 1, Math.floor(asNumber(value.nextOrderId, 1))),
+    nextLotId: Math.max(1, maxLot + 1, Math.floor(asNumber(value.nextLotId, 1))),
+  };
+}
+
 /**
  * Приводит сохранение любой поддерживаемой версии к текущему GameState.
  * Бросает SaveError, если данные не похожи на сохранение игры.
@@ -156,6 +372,7 @@ export function migrateGame(raw: unknown): GameState {
     companyName: typeof raw.companyName === "string" && raw.companyName.trim() ? raw.companyName : DEFAULT_COMPANY_NAME,
     difficulty: asDifficulty(raw.difficulty),
     economy: asEconomy(raw.economy),
+    hardware: asHardware(raw.hardware),
     gameOver: asGameOver(raw.gameOver),
     stats: { ticks: Math.max(0, Math.floor(isRecord(raw.stats) ? asNumber(raw.stats.ticks, 0) : 0)) },
     events: asEvents(raw.events),
@@ -168,7 +385,8 @@ export function migrateGame(raw: unknown): GameState {
     game.companyName = DEFAULT_COMPANY_NAME;
   }
 
-  return game;
+  // Миграция 3 → 4: появилось железо. Пустой б/у рынок наполняем сразу.
+  return refreshUsedMarket(game).state;
 }
 
 export interface ParsedSave {

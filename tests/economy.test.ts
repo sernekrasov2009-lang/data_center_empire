@@ -135,10 +135,11 @@ describe("события экономики и банкротство", () => {
 
   it("закрывает декабрь счётом и только потом меняет тариф", () => {
     const result = advanceTicks(createGame({ money: 100_000 }), HOURS_PER_YEAR);
-    const tail = result.state.events.slice(-5).map((event) => event.kind);
+    const tail = result.state.events.slice(-6).map((event) => event.kind);
     expect(tail).toEqual([
       "monthClosed",
       "billPaid",
+      "marketPriceChanged",
       "yearClosed",
       "electricityPriceChanged",
       "dayStarted",

@@ -1,6 +1,8 @@
 export * from "./types";
 export * from "./engine";
 export * from "./economy";
+export * from "./components";
+export * from "./hardware";
 export { createRng, nextUint32, nextFloat, nextInt, chance, pick } from "./core/rng";
 export {
   HOURS_PER_DAY,

@@ -1,4 +1,4 @@
-import type { DifficultyId, Speed } from "../data";
+import type { ComponentCondition, DifficultyId, Speed } from "../data";
 
 export type { Speed };
 
@@ -22,7 +22,13 @@ export type SimEventKind =
   | "billPaid"
   | "electricityPriceChanged"
   | "moneyLow"
-  | "bankrupted";
+  | "bankrupted"
+  | "orderArrived"
+  | "buildCompleted"
+  | "partFailed"
+  | "partRepaired"
+  | "usedMarketUpdated"
+  | "marketPriceChanged";
 
 export interface SimEvent {
   id: number;
@@ -31,6 +37,8 @@ export interface SimEvent {
   hour: number;
   /** Сумма или новое значение — смысл зависит от kind. */
   amount?: number;
+  /** Ссылка на объект события: id комплектующей или сборки. */
+  ref?: string;
 }
 
 export interface GameStats {
@@ -82,6 +90,96 @@ export interface GameOverInfo {
   money: number;
 }
 
+/* ── Железо (этап 3) ─────────────────────────────────────────────── */
+
+/** Экземпляр комплектующей на складе. */
+export interface PartInstance {
+  id: number;
+  componentId: string;
+  condition: ComponentCondition;
+  acquiredHour: number;
+  purchasePrice: number;
+  /** Заказ, из которого пришла деталь; null — стартовая сборка или подарок. */
+  orderId: number | null;
+  /** Для б/у: час проявления скрытого дефекта; null — дефекта нет. */
+  defectAtHour: number | null;
+}
+
+/** Деталь внутри собранного сервера. */
+export interface BuildPart {
+  componentId: string;
+  condition: ComponentCondition;
+  purchasePrice: number;
+  installedAtHour: number;
+  defectAtHour: number | null;
+  broken: boolean;
+  /** Час окончания ремонта; null — деталь исправна. */
+  repairDoneHour: number | null;
+}
+
+export type BuildStatus = "assembling" | "ready";
+
+export interface HardwareBuild {
+  id: number;
+  /** Стартовый домашний ПК — не покупка игрока. */
+  starter: boolean;
+  status: BuildStatus;
+  startedAtHour: number;
+  readyAtHour: number;
+  parts: BuildPart[];
+}
+
+export type OrderKind = "new" | "used";
+export type OrderStatus = "inTransit" | "delivered" | "cancelled" | "returned";
+
+export interface OrderLine {
+  componentId: string;
+  quantity: number;
+  unitPrice: number;
+  condition: ComponentCondition;
+}
+
+export interface HardwareOrder {
+  id: number;
+  kind: OrderKind;
+  lines: OrderLine[];
+  subtotal: number;
+  shipping: number;
+  total: number;
+  status: OrderStatus;
+  orderedAtHour: number;
+  arriveAtHour: number;
+  deliveredAtHour: number | null;
+  /** Лот б/у рынка, если заказ сделан оттуда. */
+  lotId: number | null;
+}
+
+export interface UsedLot {
+  id: number;
+  componentId: string;
+  price: number;
+  /** Скидка к новой цене, 0…1. */
+  discount: number;
+  listedAtHour: number;
+  expiresAtHour: number;
+}
+
+export interface HardwareState {
+  /** Запчасти на складе, ещё не установленные в серверы. */
+  parts: PartInstance[];
+  builds: HardwareBuild[];
+  orders: HardwareOrder[];
+  usedLots: UsedLot[];
+  /** Месячный множитель цен новых деталей, 0,9…1,1. */
+  marketPriceMult: number;
+  /** Час последнего обновления б/у рынка; −1 — рынок ещё не создавался. */
+  lastUsedMarketHour: number;
+  nextPartId: number;
+  nextBuildId: number;
+  nextOrderId: number;
+  nextLotId: number;
+}
+
 export interface GameState {
   version: number;
   seed: number;
@@ -91,6 +189,7 @@ export interface GameState {
   companyName: string;
   difficulty: DifficultyId;
   economy: EconomyState;
+  hardware: HardwareState;
   /** Заполняется, когда игра закончена (банкротство). */
   gameOver: GameOverInfo | null;
   stats: GameStats;

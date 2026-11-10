@@ -2,10 +2,11 @@ import { balance, difficulties, economy as economyData, getDifficulty, type Diff
 import { createRng } from "./core/rng";
 import { HOURS_PER_DAY, HOURS_PER_MONTH, HOURS_PER_YEAR } from "./core/time";
 import { accrueHour, billMonth, createEconomy, driftElectricityPrice } from "./economy";
+import { createHardware, driftMarketPrice, refreshUsedMarket, tickHardware } from "./hardware";
 import type { GameState, SimEvent, Speed } from "./types";
 
 /** Версия структуры GameState. Меняется при миграциях сохранений. */
-export const GAME_STATE_VERSION = 3;
+export const GAME_STATE_VERSION = 4;
 
 export const DEFAULT_COMPANY_NAME = "Uptime Hosting";
 
@@ -28,7 +29,7 @@ export function createGame(options: NewGameOptions = {}): GameState {
   const seed = options.seed ?? balance.start.seed;
   const money = options.money ?? getDifficulty(difficulty).startMoney;
 
-  return {
+  const game: GameState = {
     version: GAME_STATE_VERSION,
     seed,
     rng: createRng(seed),
@@ -37,11 +38,15 @@ export function createGame(options: NewGameOptions = {}): GameState {
     companyName: (options.companyName ?? DEFAULT_COMPANY_NAME).trim() || DEFAULT_COMPANY_NAME,
     difficulty,
     economy: createEconomy(),
+    hardware: createHardware(),
     gameOver: null,
     stats: { ticks: 0 },
     events: [],
     nextEventId: 1,
   };
+
+  // Стартовый б/у рынок формируется сразу, чтобы магазин был непустым на паузе.
+  return refreshUsedMarket(game, true).state;
 }
 
 function roundMoney(value: number): number {
@@ -54,9 +59,11 @@ function pushEvent(
   kind: SimEvent["kind"],
   hour: number,
   amount?: number,
+  ref?: string,
 ): void {
   const event: SimEvent = { id: state.nextEventId, kind, hour };
   if (amount !== undefined) event.amount = amount;
+  if (ref !== undefined) event.ref = ref;
   state.nextEventId += 1;
   events.push(event);
   state.events.push(event);
@@ -99,6 +106,12 @@ export function advanceTicks(state: GameState, ticks: number): AdvanceResult {
     advanced += 1;
     next = accrueHour(next);
 
+    const hardwareTick = tickHardware(next);
+    next = hardwareTick.state;
+    for (const event of hardwareTick.events) {
+      pushEvent(next, events, event.kind, next.time.hour, event.amount, event.ref);
+    }
+
     const hour = next.time.hour;
     const monthClosed = hour % HOURS_PER_MONTH === 0;
 
@@ -107,6 +120,11 @@ export function advanceTicks(state: GameState, ticks: number): AdvanceResult {
       next = bill.state;
       pushEvent(next, events, "monthClosed", hour);
       pushEvent(next, events, "billPaid", hour, roundMoney(bill.report.totalExpenses));
+
+      const market = driftMarketPrice(next);
+      next = market.state;
+      pushEvent(next, events, "marketPriceChanged", hour, market.mult);
+
       if (bill.lowMoney) {
         pushEvent(next, events, "moneyLow", hour, roundMoney(next.money));
       }

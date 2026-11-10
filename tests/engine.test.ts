@@ -76,11 +76,12 @@ describe("игровой цикл", () => {
     expect(kinds.filter((kind) => kind === "monthClosed")).toHaveLength(1);
 
     const last = result.state.events[result.state.events.length - 1];
-    const bill = result.state.events[result.state.events.length - 2];
-    const close = result.state.events[result.state.events.length - 3];
+    const closeIndex = result.state.events.findIndex((event) => event.kind === "monthClosed");
+    const close = result.state.events[closeIndex];
+    const bill = result.state.events[closeIndex + 1];
     expect(last).toMatchObject({ kind: "dayStarted", hour: 720 });
-    expect(bill).toMatchObject({ kind: "billPaid", hour: 720 });
     expect(close).toMatchObject({ kind: "monthClosed", hour: 720 });
+    expect(bill).toMatchObject({ kind: "billPaid", hour: 720 });
   });
 
   it("закрывает год на 12-м месяце", () => {

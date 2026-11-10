@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { balance } from "../data";
+import { balance, findComponent } from "../data";
 import type { DifficultyId } from "../data";
 import type { Language } from "../i18n/language";
 import { platform } from "../platform";
@@ -9,12 +9,19 @@ import { SaveError, buildEnvelope, parseSave } from "../save/migrate";
 import type { SaveMeta, SaveSlotId } from "../save/types";
 import {
   advanceTicks,
+  buyUsedLot as applyBuyUsedLot,
+  cancelOrder as applyCancelOrder,
   createGame,
   getGameDate,
+  placeNewOrder as applyNewOrder,
+  previewNewOrder,
+  returnOrder as applyReturnOrder,
   setPaused,
   setSpeed as applySpeed,
+  startBuild as applyStartBuild,
   togglePause as applyTogglePause,
   type GameState,
+  type HardwareFailure,
   type SimEvent,
   type Speed,
 } from "../sim";
@@ -23,6 +30,7 @@ import { createDefaultSettings, mergeSettings, type Settings } from "./settings"
 import { formatMoney } from "../ui/format";
 
 export type Screen = "menu" | "game";
+export type GameView = "dashboard" | "build" | "warehouse";
 export type Overlay = "newGame" | "slots" | "pause" | "settings" | "gameOver" | null;
 export type SlotMode = "save" | "load";
 export type ToastKind = "info" | "warn" | "error";
@@ -65,6 +73,7 @@ interface GameStore {
   overlay: Overlay;
   returnTo: Overlay;
   slotMode: SlotMode;
+  view: GameView;
 
   settings: Settings;
   settingsReady: boolean;
@@ -93,6 +102,7 @@ interface GameStore {
   openSettings: (returnTo?: Overlay) => void;
   closeOverlay: () => void;
   resume: () => void;
+  setView: (view: GameView) => void;
 
   saveSlot: (slot: SaveSlotId) => Promise<void>;
   loadSlot: (slot: SaveSlotId) => Promise<void>;
@@ -102,6 +112,12 @@ interface GameStore {
   exportSave: () => Promise<void>;
   importSave: () => Promise<void>;
   refreshSaves: () => Promise<void>;
+
+  placeNewOrder: (componentId: string, quantity: number) => void;
+  buyUsedLot: (lotId: number) => void;
+  cancelOrder: (orderId: number) => void;
+  returnOrder: (orderId: number) => void;
+  startBuild: (partIds: number[]) => boolean;
 
   requestConfirm: (request: ConfirmRequest) => void;
   resolveConfirm: (accepted: boolean) => void;
@@ -165,8 +181,18 @@ export const useGameStore = create<GameStore>((set, get) => {
       screen: "game",
       overlay: null,
       returnTo: null,
+      view: "dashboard",
       dirty: true,
     });
+  }
+
+  function notifyFailure(failure: HardwareFailure): void {
+    if (failure.code === "invalidBuild" && failure.buildErrors && failure.buildErrors.length > 0) {
+      const first = failure.buildErrors[0]!;
+      notify(`hardware.error.${first.code}`, first.params, "error");
+      return;
+    }
+    notify(`hardware.error.${failure.code}`, failure.params, "error");
   }
 
   async function autosave(): Promise<void> {
@@ -208,6 +234,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     overlay: null,
     returnTo: null,
     slotMode: "load",
+    view: "dashboard",
 
     settings: createDefaultSettings(),
     settingsReady: false,
@@ -255,6 +282,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         screen: "game",
         overlay: null,
         returnTo: null,
+        view: "dashboard",
         dirty: true,
       });
     },
@@ -378,6 +406,92 @@ export const useGameStore = create<GameStore>((set, get) => {
       } catch {
         // Список слотов не критичен для игры.
       }
+    },
+
+    setView: (view) => set({ view }),
+
+    placeNewOrder: (componentId, quantity) => {
+      const { game, settings } = get();
+      const preview = previewNewOrder(game, componentId, quantity);
+      const language = settings.game.language;
+      const numberFormat = settings.game.numberFormat;
+
+      const commit = (): void => {
+        const result = applyNewOrder(get().game, componentId, quantity);
+        if (!result.ok) {
+          notifyFailure(result.failure);
+          return;
+        }
+        set({ game: result.state, dirty: true });
+        notify("toast.orderPlaced", {
+          total: formatMoney(result.order.total, language, numberFormat),
+        });
+      };
+
+      if (settings.game.confirmExpensive && preview.total > 1000) {
+        get().requestConfirm({
+          titleKey: "hardware.confirm.title",
+          textKey: "hardware.confirm.text",
+          params: { total: formatMoney(preview.total, language, numberFormat) },
+          action: commit,
+        });
+        return;
+      }
+      commit();
+    },
+
+    buyUsedLot: (lotId) => {
+      const { settings } = get();
+      const result = applyBuyUsedLot(get().game, lotId);
+      if (!result.ok) {
+        notifyFailure(result.failure);
+        return;
+      }
+      set({ game: result.state, dirty: true });
+      notify("toast.lotBought", {
+        total: formatMoney(result.order.total, settings.game.language, settings.game.numberFormat),
+      });
+    },
+
+    cancelOrder: (orderId) => {
+      const { settings } = get();
+      const result = applyCancelOrder(get().game, orderId);
+      if (!result.ok) {
+        notifyFailure(result.failure);
+        return;
+      }
+      set({ game: result.state, dirty: true });
+      notify("toast.orderCancelled", {
+        refund: formatMoney(result.refund, settings.game.language, settings.game.numberFormat),
+      });
+    },
+
+    returnOrder: (orderId) => {
+      const { settings } = get();
+      const result = applyReturnOrder(get().game, orderId);
+      if (!result.ok) {
+        notifyFailure(result.failure);
+        return;
+      }
+      set({ game: result.state, dirty: true });
+      notify("toast.orderReturned", {
+        refund: formatMoney(result.refund, settings.game.language, settings.game.numberFormat),
+      });
+    },
+
+    startBuild: (partIds) => {
+      const result = applyStartBuild(get().game, partIds);
+      if (!result.ok) {
+        notifyFailure(result.failure);
+        return false;
+      }
+      set({ game: result.state, dirty: true });
+      if (result.build.status === "ready") {
+        notify("toast.buildReady", { n: result.build.id });
+      } else {
+        notify("toast.buildStarted", { hours: result.hours });
+      }
+      return true;
     },
 
     requestConfirm: (request) => set({ confirm: request }),
@@ -515,6 +629,26 @@ export const useGameStore = create<GameStore>((set, get) => {
         notify("toast.bill", {
           amount: formatMoney(-(bill.amount ?? 0), settings.game.language, settings.game.numberFormat),
         });
+      }
+
+      const arrived = result.events.find((event) => event.kind === "orderArrived");
+      if (arrived) {
+        notify("toast.orderArrived", {
+          total: formatMoney(arrived.amount ?? 0, settings.game.language, settings.game.numberFormat),
+        });
+      }
+
+      const built = result.events.find((event) => event.kind === "buildCompleted");
+      if (built) {
+        notify("toast.buildCompleted", {
+          total: formatMoney(built.amount ?? 0, settings.game.language, settings.game.numberFormat),
+        });
+      }
+
+      const failed = result.events.find((event) => event.kind === "partFailed");
+      if (failed) {
+        const component = failed.ref ? findComponent(failed.ref) : undefined;
+        notify("toast.partFailed", { part: component?.name ?? "—" }, "warn");
       }
 
       if (result.state.gameOver && !game.gameOver) {
