@@ -3,14 +3,18 @@ import {
   DIFFICULTY_IDS,
   economy as economyData,
   findComponent,
+  getLocationDefinition,
   hardware as hardwareData,
+  locationData,
   type DifficultyId,
+  type PowerOffReason,
 } from "../data";
 import {
   DEFAULT_COMPANY_NAME,
   GAME_STATE_VERSION,
   createEconomy,
   createHardware,
+  createLocation,
   createRng,
   refreshUsedMarket,
 } from "../sim";
@@ -22,6 +26,7 @@ import type {
   HardwareBuild,
   HardwareOrder,
   HardwareState,
+  LocationState,
   MonthlyReport,
   PartInstance,
   SimEvent,
@@ -65,6 +70,12 @@ const EVENT_KINDS: readonly SimEvent["kind"][] = [
   "partRepaired",
   "usedMarketUpdated",
   "marketPriceChanged",
+  "breakerTripped",
+  "serversShutdown",
+  "serversRestarted",
+  "noiseComplaint",
+  "noiseFine",
+  "neighborsShutdown",
 ];
 
 function asEvents(value: unknown): SimEvent[] {
@@ -201,6 +212,10 @@ function asBuild(value: unknown): HardwareBuild | null {
   const startedAtHour = Math.max(0, Math.floor(asNumber(value.startedAtHour, 0)));
   const readyAtHour = Math.max(startedAtHour, Math.floor(asNumber(value.readyAtHour, startedAtHour)));
   const status = value.status === "assembling" ? "assembling" : "ready";
+  const slot =
+    typeof value.slot === "number" && Number.isInteger(value.slot) && value.slot >= 0
+      ? value.slot
+      : null;
   return {
     id,
     starter: value.starter === true,
@@ -208,6 +223,7 @@ function asBuild(value: unknown): HardwareBuild | null {
     startedAtHour,
     readyAtHour,
     parts,
+    slot,
   };
 }
 
@@ -329,6 +345,109 @@ function asHardware(value: unknown): HardwareState {
   };
 }
 
+function asLocation(value: unknown): LocationState {
+  const fallback = createLocation();
+  if (!isRecord(value)) return fallback;
+
+  const id =
+    typeof value.id === "string" && locationData.locations.some((definition) => definition.id === value.id)
+      ? value.id
+      : fallback.id;
+  const definition = getLocationDefinition(id);
+  const coolingId =
+    typeof value.coolingId === "string" && locationData.cooling.some((option) => option.id === value.coolingId)
+      ? value.coolingId
+      : definition.defaultCoolingId;
+
+  const owned = Array.isArray(value.ownedCooling)
+    ? value.ownedCooling.filter(
+        (candidate): candidate is string =>
+          typeof candidate === "string" && locationData.cooling.some((option) => option.id === candidate),
+      )
+    : [];
+  if (!owned.includes(coolingId)) owned.push(coolingId);
+
+  const internetPlanId =
+    typeof value.internetPlanId === "string" && definition.internetPlans.includes(value.internetPlanId)
+      ? value.internetPlanId
+      : definition.defaultInternetPlanId;
+
+  const offReasons: readonly PowerOffReason[] = ["breaker", "overheat", "neighbors"];
+  const powerOff =
+    typeof value.powerOff === "string" && (offReasons as readonly string[]).includes(value.powerOff)
+      ? (value.powerOff as PowerOffReason)
+      : "none";
+
+  const minGap = locationData.noise.minComplaintGapHours;
+  return {
+    id,
+    coolingId,
+    ownedCooling: owned,
+    internetPlanId,
+    powerOff,
+    overloadHours: Math.max(0, Math.floor(asNumber(value.overloadHours, 0))),
+    irritation: Math.min(100, Math.max(0, asNumber(value.irritation, 0))),
+    lastComplaintHour: Math.max(-minGap, Math.floor(asNumber(value.lastComplaintHour, -minGap))),
+    lastFineHour: Math.max(-minGap, Math.floor(asNumber(value.lastFineHour, -minGap))),
+    insulated: value.insulated === true,
+    outsideTempC: Math.min(60, Math.max(-40, asNumber(value.outsideTempC, fallback.outsideTempC))),
+    roomTempC: Math.min(120, Math.max(-20, asNumber(value.roomTempC, fallback.roomTempC))),
+  };
+}
+
+/**
+ * Приводит слоты сборок в согласованный вид: один сервер — один слот,
+ * лишние слоты снимаются, готовые серверы автоматически занимают свободные места.
+ */
+function reconcileSlots(game: GameState): GameState {
+  const definition = getLocationDefinition(game.location.id);
+  const used = new Set<number>();
+
+  const builds = game.hardware.builds.map((build) => {
+    const slot = build.slot;
+    if (
+      build.status === "ready" &&
+      slot !== null &&
+      Number.isInteger(slot) &&
+      slot >= 0 &&
+      slot < definition.slots &&
+      !used.has(slot)
+    ) {
+      used.add(slot);
+      return build;
+    }
+    return slot === null ? build : { ...build, slot: null };
+  });
+
+  const ordered = builds
+    .slice()
+    .sort((left, right) => Number(right.starter) - Number(left.starter) || left.id - right.id);
+  const assigned = new Map<number, number>();
+  for (const build of ordered) {
+    if (build.status !== "ready" || build.slot !== null) continue;
+    for (let slot = 0; slot < definition.slots; slot += 1) {
+      if (used.has(slot)) continue;
+      used.add(slot);
+      assigned.set(build.id, slot);
+      break;
+    }
+  }
+
+  if (assigned.size === 0 && builds.every((build, index) => build === game.hardware.builds[index])) {
+    return game;
+  }
+
+  return {
+    ...game,
+    hardware: {
+      ...game.hardware,
+      builds: builds.map((build) =>
+        assigned.has(build.id) ? { ...build, slot: assigned.get(build.id) ?? null } : build,
+      ),
+    },
+  };
+}
+
 /**
  * Приводит сохранение любой поддерживаемой версии к текущему GameState.
  * Бросает SaveError, если данные не похожи на сохранение игры.
@@ -373,6 +492,7 @@ export function migrateGame(raw: unknown): GameState {
     difficulty: asDifficulty(raw.difficulty),
     economy: asEconomy(raw.economy),
     hardware: asHardware(raw.hardware),
+    location: asLocation(raw.location),
     gameOver: asGameOver(raw.gameOver),
     stats: { ticks: Math.max(0, Math.floor(isRecord(raw.stats) ? asNumber(raw.stats.ticks, 0) : 0)) },
     events: asEvents(raw.events),
@@ -386,7 +506,9 @@ export function migrateGame(raw: unknown): GameState {
   }
 
   // Миграция 3 → 4: появилось железо. Пустой б/у рынок наполняем сразу.
-  return refreshUsedMarket(game).state;
+  // Миграция 4 → 5: появилась локация; готовые серверы получают слоты.
+  const withSlots = reconcileSlots(game);
+  return refreshUsedMarket(withSlots).state;
 }
 
 export interface ParsedSave {

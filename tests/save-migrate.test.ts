@@ -176,4 +176,77 @@ describe("миграции сохранений", () => {
     expect(game.events[0]!.amount).toBe(35.55);
     expect(game.events[1]!.amount).toBe(-2001);
   });
+
+  it("поднимает сохранение версии 4 с домашней локацией и слотами", () => {
+    const game = migrateGame({ ...legacy, version: 4 });
+    expect(game.version).toBe(GAME_STATE_VERSION);
+    expect(game.location.id).toBe("home");
+    expect(game.location.coolingId).toBe("window");
+    expect(game.location.ownedCooling).toEqual(["window"]);
+    expect(game.location.internetPlanId).toBe("home-100");
+    expect(game.location.powerOff).toBe("none");
+    expect(game.location.insulated).toBe(false);
+  });
+
+  it("ставит готовые серверы в слоты при миграции", () => {
+    const source = createGame();
+    const ready = structuredClone(source.hardware.builds[0]!);
+    const game = migrateGame({
+      ...source,
+      hardware: {
+        ...source.hardware,
+        builds: [
+          { ...structuredClone(ready), id: 7, starter: false, slot: null },
+          { ...structuredClone(ready), id: 3, starter: true, slot: null },
+        ],
+      },
+    });
+    const slots = game.hardware.builds.map((build) => [build.id, build.slot]);
+    expect(slots).toEqual([
+      [7, 1],
+      [3, 0],
+    ]);
+  });
+
+  it("чистит испорченную локацию", () => {
+    const source = createGame();
+    const game = migrateGame({
+      ...source,
+      location: {
+        coolingId: "nope",
+        internetPlanId: "colo-10g",
+        powerOff: "meltdown",
+        ownedCooling: ["nope", "split"],
+        irritation: 900,
+        overloadHours: -3,
+        insulated: "yes",
+        outsideTempC: -999,
+      },
+    });
+    expect(game.location.coolingId).toBe("window");
+    expect(game.location.internetPlanId).toBe("home-100");
+    expect(game.location.powerOff).toBe("none");
+    expect(game.location.ownedCooling).toEqual(["split", "window"]);
+    expect(game.location.irritation).toBe(100);
+    expect(game.location.overloadHours).toBe(0);
+    expect(game.location.insulated).toBe(false);
+    expect(game.location.outsideTempC).toBe(-40);
+  });
+
+  it("принимает новые события локации", () => {
+    const game = migrateGame({
+      ...legacy,
+      version: 4,
+      events: [
+        { id: 1, kind: "breakerTripped", hour: 10, amount: 1800 },
+        { id: 2, kind: "noiseFine", hour: 11, amount: 50 },
+        { id: 3, kind: "neighborsShutdown", hour: 12 },
+      ],
+    });
+    expect(game.events.map((event) => event.kind)).toEqual([
+      "breakerTripped",
+      "noiseFine",
+      "neighborsShutdown",
+    ]);
+  });
 });

@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "breakerGraceHours": 1,
+  "climate": {
+    "monthlyBaseC": [-5, -3, 4, 11, 18, 24, 29, 28, 21, 13, 5, -2],
+    "dailyAmplitudeC": 5,
+    "minRoomTempC": 12,
+    "warnC": 35,
+    "throttleC": 45,
+    "shutdownC": 55
+  },
+  "noise": {
+    "nightStartHour": 22,
+    "nightEndHour": 8,
+    "nightLimitDb": 30,
+    "dayLimitDb": 50,
+    "irritationPerDbHour": 0.2,
+    "irritationDecayPerHour": 0.15,
+    "complaintAt": 12,
+    "fineAt": 24,
+    "shutdownAt": 48,
+    "fineAmount": 50,
+    "minComplaintGapHours": 24
+  },
+  "insulation": {
+    "price": 280,
+    "reductionDb": 8
+  },
+  "cooling": [
+    { "id": "window", "conductanceWPerK": 25, "powerW": 0, "price": 0, "noiseDb": 0 },
+    { "id": "fan", "conductanceWPerK": 40, "powerW": 0, "price": 30, "noiseDb": 12 },
+    { "id": "split", "conductanceWPerK": 150, "powerW": 300, "price": 650, "noiseDb": 22 },
+    { "id": "crac", "conductanceWPerK": 1500, "powerW": 1500, "price": 5000, "noiseDb": 35 }
+  ],
+  "locations": [
+    {
+      "id": "home",
+      "slots": 2,
+      "powerCapacityW": 1500,
+      "rentPerMonth": 0,
+      "internetPlans": ["home-100", "home-300"],
+      "defaultInternetPlanId": "home-100",
+      "defaultCoolingId": "window"
+    }
+  ]
+}

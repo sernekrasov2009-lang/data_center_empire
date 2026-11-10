@@ -11,11 +11,11 @@ import {
 } from "./EconomyPanels";
 
 const CHECKLIST = [
-  "dash.check.catalog",
-  "dash.check.build",
-  "dash.check.shop",
-  "dash.check.delivery",
-  "dash.check.wear",
+  "dash.check.location",
+  "dash.check.power",
+  "dash.check.cooling",
+  "dash.check.internet",
+  "dash.check.noise",
 ] as const;
 
 export function DashboardScreen(): React.JSX.Element {

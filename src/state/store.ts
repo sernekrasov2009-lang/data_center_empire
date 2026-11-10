@@ -9,19 +9,26 @@ import { SaveError, buildEnvelope, parseSave } from "../save/migrate";
 import type { SaveMeta, SaveSlotId } from "../save/types";
 import {
   advanceTicks,
+  buyInsulation as applyBuyInsulation,
   buyUsedLot as applyBuyUsedLot,
   cancelOrder as applyCancelOrder,
   createGame,
   getGameDate,
   placeNewOrder as applyNewOrder,
   previewNewOrder,
+  resetBreaker as applyResetBreaker,
+  restartServers as applyRestartServers,
   returnOrder as applyReturnOrder,
+  setBuildSlot as applySetBuildSlot,
+  setCooling as applySetCooling,
+  setInternetPlan as applySetInternetPlan,
   setPaused,
   setSpeed as applySpeed,
   startBuild as applyStartBuild,
   togglePause as applyTogglePause,
   type GameState,
   type HardwareFailure,
+  type LocationFailure,
   type SimEvent,
   type Speed,
 } from "../sim";
@@ -30,7 +37,7 @@ import { createDefaultSettings, mergeSettings, type Settings } from "./settings"
 import { formatMoney } from "../ui/format";
 
 export type Screen = "menu" | "game";
-export type GameView = "dashboard" | "build" | "warehouse";
+export type GameView = "dashboard" | "build" | "warehouse" | "location";
 export type Overlay = "newGame" | "slots" | "pause" | "settings" | "gameOver" | null;
 export type SlotMode = "save" | "load";
 export type ToastKind = "info" | "warn" | "error";
@@ -118,6 +125,12 @@ interface GameStore {
   cancelOrder: (orderId: number) => void;
   returnOrder: (orderId: number) => void;
   startBuild: (partIds: number[]) => boolean;
+  placeBuild: (buildId: number, slot: number | null) => void;
+  setCooling: (coolingId: string) => void;
+  setInternetPlan: (planId: string) => void;
+  buyInsulation: () => void;
+  resetBreaker: () => void;
+  restartServers: () => void;
 
   requestConfirm: (request: ConfirmRequest) => void;
   resolveConfirm: (accepted: boolean) => void;
@@ -193,6 +206,10 @@ export const useGameStore = create<GameStore>((set, get) => {
       return;
     }
     notify(`hardware.error.${failure.code}`, failure.params, "error");
+  }
+
+  function notifyLocationFailure(failure: LocationFailure): void {
+    notify(`location.error.${failure.code}`, failure.params, "error");
   }
 
   async function autosave(): Promise<void> {
@@ -494,6 +511,75 @@ export const useGameStore = create<GameStore>((set, get) => {
       return true;
     },
 
+    placeBuild: (buildId, slot) => {
+      const result = applySetBuildSlot(get().game, buildId, slot);
+      if (!result.ok) {
+        notifyLocationFailure(result.failure);
+        return;
+      }
+      set({ game: result.state, dirty: true });
+    },
+
+    setCooling: (coolingId) => {
+      const { settings } = get();
+      const result = applySetCooling(get().game, coolingId);
+      if (!result.ok) {
+        notifyLocationFailure(result.failure);
+        return;
+      }
+      set({ game: result.state, dirty: true });
+      if (result.cost > 0) {
+        notify("toast.coolingBought", {
+          cost: formatMoney(result.cost, settings.game.language, settings.game.numberFormat),
+        });
+      } else {
+        notify("toast.coolingChanged");
+      }
+    },
+
+    setInternetPlan: (planId) => {
+      const result = applySetInternetPlan(get().game, planId);
+      if (!result.ok) {
+        notifyLocationFailure(result.failure);
+        return;
+      }
+      set({ game: result.state, dirty: true });
+      notify("toast.planChanged");
+    },
+
+    buyInsulation: () => {
+      const { settings } = get();
+      const result = applyBuyInsulation(get().game);
+      if (!result.ok) {
+        notifyLocationFailure(result.failure);
+        return;
+      }
+      set({ game: result.state, dirty: true });
+      notify("toast.insulationBought", {
+        cost: formatMoney(result.cost, settings.game.language, settings.game.numberFormat),
+      });
+    },
+
+    resetBreaker: () => {
+      const result = applyResetBreaker(get().game);
+      if (!result.ok) {
+        notifyLocationFailure(result.failure);
+        return;
+      }
+      set({ game: result.state, dirty: true });
+      notify("toast.breakerReset");
+    },
+
+    restartServers: () => {
+      const result = applyRestartServers(get().game);
+      if (!result.ok) {
+        notifyLocationFailure(result.failure);
+        return;
+      }
+      set({ game: result.state, dirty: true });
+      notify("toast.serversRestarted");
+    },
+
     requestConfirm: (request) => set({ confirm: request }),
     resolveConfirm: (accepted) => {
       const request = get().confirm;
@@ -649,6 +735,35 @@ export const useGameStore = create<GameStore>((set, get) => {
       if (failed) {
         const component = failed.ref ? findComponent(failed.ref) : undefined;
         notify("toast.partFailed", { part: component?.name ?? "—" }, "warn");
+      }
+
+      const tripped = result.events.find((event) => event.kind === "breakerTripped");
+      if (tripped) {
+        notify("toast.breakerTripped", { load: Math.round(tripped.amount ?? 0) }, "error");
+      }
+
+      const shutdown = result.events.find((event) => event.kind === "serversShutdown");
+      if (shutdown) {
+        notify("toast.serversShutdown", { temp: (shutdown.amount ?? 0).toFixed(1) }, "error");
+      }
+
+      const complaint = result.events.find((event) => event.kind === "noiseComplaint");
+      if (complaint) {
+        notify("toast.noiseComplaint", { db: (complaint.amount ?? 0).toFixed(1) }, "warn");
+      }
+
+      const fine = result.events.find((event) => event.kind === "noiseFine");
+      if (fine) {
+        notify(
+          "toast.noiseFine",
+          { amount: formatMoney(fine.amount ?? 0, settings.game.language, settings.game.numberFormat) },
+          "error",
+        );
+      }
+
+      const neighbors = result.events.find((event) => event.kind === "neighborsShutdown");
+      if (neighbors) {
+        notify("toast.neighborsShutdown", undefined, "error");
       }
 
       if (result.state.gameOver && !game.gameOver) {

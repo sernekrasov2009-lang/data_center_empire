@@ -2,6 +2,7 @@ import rawBalance from "./balance.json";
 import rawComponents from "./components.json";
 import rawDifficulties from "./difficulties.json";
 import rawEconomy from "./economy.json";
+import rawLocation from "./location.json";
 
 /** Скорости игры. 0 — пауза (DESIGN.md, разд. 1). */
 export type Speed = 0 | 1 | 5 | 20 | 60;
@@ -297,6 +298,200 @@ export function validateEconomy(data: EconomyFile): string[] {
   }
   if (!Number.isInteger(data.reports.historySize) || data.reports.historySize < 6) {
     errors.push("reports.historySize: ожидается целое ≥ 6");
+  }
+
+  return errors;
+}
+
+/* ── Локация, охлаждение, шум и соседи (DESIGN.md, разд. 4) ───────── */
+
+export type PowerOffReason = "none" | "breaker" | "overheat" | "neighbors";
+
+export interface CoolingOption {
+  id: string;
+  /** Проводимость охлаждения, Вт/К: T_room = T_outside + P_heat / C. */
+  conductanceWPerK: number;
+  /** Сколько ватт потребляет само охлаждение. */
+  powerW: number;
+  price: number;
+  noiseDb: number;
+}
+
+export interface ClimateSpec {
+  /** Средняя температура по месяцам, °C (январь…декабрь). */
+  monthlyBaseC: number[];
+  /** Суточная амплитуда вокруг средней, °C. */
+  dailyAmplitudeC: number;
+  /** Дом отапливается зимой: комнатная температура не опускается ниже. */
+  minRoomTempC: number;
+  warnC: number;
+  throttleC: number;
+  shutdownC: number;
+}
+
+export interface NoiseSpec {
+  /** Ночной интервал: с nightStartHour до nightEndHour (через полночь). */
+  nightStartHour: number;
+  nightEndHour: number;
+  nightLimitDb: number;
+  dayLimitDb: number;
+  /** Прирост раздражения за каждый дБ сверх лимита за час. */
+  irritationPerDbHour: number;
+  irritationDecayPerHour: number;
+  complaintAt: number;
+  fineAt: number;
+  shutdownAt: number;
+  fineAmount: number;
+  minComplaintGapHours: number;
+}
+
+export interface InsulationSpec {
+  price: number;
+  reductionDb: number;
+}
+
+export interface LocationDefinition {
+  id: LocationKind;
+  slots: number;
+  powerCapacityW: number;
+  rentPerMonth: number;
+  /** id тарифов интернета из economy.json, доступных в этой локации. */
+  internetPlans: string[];
+  defaultInternetPlanId: string;
+  defaultCoolingId: string;
+}
+
+export interface LocationFile {
+  version: number;
+  /** Сколько часов подряд допустима перегрузка до срабатывания автомата. */
+  breakerGraceHours: number;
+  climate: ClimateSpec;
+  noise: NoiseSpec;
+  insulation: InsulationSpec;
+  cooling: CoolingOption[];
+  locations: LocationDefinition[];
+}
+
+export const locationData = rawLocation as LocationFile;
+
+export function getLocationDefinition(id: string): LocationDefinition {
+  const definition = locationData.locations.find((candidate) => candidate.id === id);
+  if (!definition) throw new Error(`Неизвестная локация: ${id}`);
+  return definition;
+}
+
+export function getCooling(id: string): CoolingOption {
+  const cooling = locationData.cooling.find((candidate) => candidate.id === id);
+  if (!cooling) throw new Error(`Неизвестное охлаждение: ${id}`);
+  return cooling;
+}
+
+function integerInRange(value: number, min: number, max: number): boolean {
+  return Number.isInteger(value) && value >= min && value <= max;
+}
+
+/** Проверка location.json: климат, охлаждение, шум и ссылки на интернет-тарифы. */
+export function validateLocation(data: LocationFile): string[] {
+  const errors: string[] = [];
+
+  if (!Number.isInteger(data.version) || data.version < 1) {
+    errors.push("version: ожидается целое число ≥ 1");
+  }
+  if (!Number.isInteger(data.breakerGraceHours) || data.breakerGraceHours < 0 || data.breakerGraceHours > 24) {
+    errors.push("breakerGraceHours: ожидается целое 0…24");
+  }
+
+  const climate = data.climate;
+  if (!Array.isArray(climate.monthlyBaseC) || climate.monthlyBaseC.length !== 12) {
+    errors.push("climate.monthlyBaseC: нужно 12 значений");
+  } else if (climate.monthlyBaseC.some((value) => value < -30 || value > 45)) {
+    errors.push("climate.monthlyBaseC: ожидается −30…45 °C");
+  }
+  if (!(climate.dailyAmplitudeC >= 0 && climate.dailyAmplitudeC <= 15)) {
+    errors.push("climate.dailyAmplitudeC: ожидается 0…15");
+  }
+  if (!(climate.minRoomTempC >= 0 && climate.minRoomTempC <= 25)) {
+    errors.push("climate.minRoomTempC: ожидается 0…25");
+  }
+  if (!(climate.warnC >= 20 && climate.warnC < climate.throttleC)) {
+    errors.push("climate.warnC: ожидается ≥ 20 и меньше throttleC");
+  }
+  if (!(climate.throttleC < climate.shutdownC && climate.shutdownC <= 70)) {
+    errors.push("climate.throttleC: ожидается меньше shutdownC ≤ 70");
+  }
+
+  const noise = data.noise;
+  if (!integerInRange(noise.nightStartHour, 0, 23) || !integerInRange(noise.nightEndHour, 0, 23)) {
+    errors.push("noise.night: часы должны быть целыми 0…23");
+  }
+  if (!(noise.nightLimitDb >= 0 && noise.nightLimitDb <= 120)) {
+    errors.push("noise.nightLimitDb: ожидается 0…120");
+  }
+  if (!(noise.dayLimitDb >= noise.nightLimitDb && noise.dayLimitDb <= 120)) {
+    errors.push("noise.dayLimitDb: ожидается не меньше ночного и ≤ 120");
+  }
+  if (!(noise.irritationPerDbHour >= 0)) errors.push("noise.irritationPerDbHour: должно быть ≥ 0");
+  if (!(noise.irritationDecayPerHour >= 0)) errors.push("noise.irritationDecayPerHour: должно быть ≥ 0");
+  if (!(noise.complaintAt > 0 && noise.complaintAt < noise.fineAt && noise.fineAt < noise.shutdownAt)) {
+    errors.push("noise: ожидается 0 < complaintAt < fineAt < shutdownAt");
+  }
+  if (!(noise.fineAmount >= 0)) errors.push("noise.fineAmount: должно быть ≥ 0");
+  if (!Number.isInteger(noise.minComplaintGapHours) || noise.minComplaintGapHours < 1) {
+    errors.push("noise.minComplaintGapHours: ожидается целое ≥ 1");
+  }
+
+  if (!(data.insulation.price >= 0)) errors.push("insulation.price: должно быть ≥ 0");
+  if (!(data.insulation.reductionDb >= 0 && data.insulation.reductionDb <= 30)) {
+    errors.push("insulation.reductionDb: ожидается 0…30");
+  }
+
+  const coolingIds = data.cooling.map((option) => option.id);
+  if (coolingIds.length === 0) errors.push("cooling: нужен хотя бы один вариант");
+  if (new Set(coolingIds).size !== coolingIds.length) {
+    errors.push("cooling: id должны быть уникальны");
+  }
+  for (const option of data.cooling) {
+    const prefix = `cooling.${option.id}`;
+    if (!option.id) errors.push("cooling: пустой id");
+    if (!(option.conductanceWPerK > 0) || option.conductanceWPerK > 10000) {
+      errors.push(`${prefix}.conductanceWPerK: ожидается 0…10000`);
+    }
+    if (!(option.powerW >= 0)) errors.push(`${prefix}.powerW: должно быть ≥ 0`);
+    if (!(option.price >= 0)) errors.push(`${prefix}.price: должно быть ≥ 0`);
+    if (!(option.noiseDb >= 0 && option.noiseDb <= 80)) errors.push(`${prefix}.noiseDb: ожидается 0…80`);
+  }
+
+  const planIds = new Set(data.locations.flatMap((definition) => definition.internetPlans));
+  for (const planId of planIds) {
+    if (!economy.internet.plans.some((plan) => plan.id === planId)) {
+      errors.push(`locations: неизвестный тариф интернета ${planId}`);
+    }
+  }
+
+  const locationIds = data.locations.map((definition) => definition.id);
+  if (locationIds.length === 0) errors.push("locations: нужна хотя бы одна локация");
+  if (new Set(locationIds).size !== locationIds.length) {
+    errors.push("locations: id должны быть уникальны");
+  }
+  for (const definition of data.locations) {
+    const prefix = `locations.${definition.id}`;
+    if (!LOCATION_KINDS.includes(definition.id)) errors.push(`${prefix}.id: неизвестная локация`);
+    if (!Number.isInteger(definition.slots) || definition.slots < 1 || definition.slots > 400) {
+      errors.push(`${prefix}.slots: ожидается целое 1…400`);
+    }
+    if (!(definition.powerCapacityW > 0) || definition.powerCapacityW > 5_000_000) {
+      errors.push(`${prefix}.powerCapacityW: ожидается 0…5 000 000 Вт`);
+    }
+    if (!(definition.rentPerMonth >= 0)) errors.push(`${prefix}.rentPerMonth: должно быть ≥ 0`);
+    if (!Array.isArray(definition.internetPlans) || definition.internetPlans.length === 0) {
+      errors.push(`${prefix}.internetPlans: нужен непустой список`);
+    }
+    if (!definition.internetPlans.includes(definition.defaultInternetPlanId)) {
+      errors.push(`${prefix}.defaultInternetPlanId: отсутствует в internetPlans`);
+    }
+    if (!coolingIds.includes(definition.defaultCoolingId)) {
+      errors.push(`${prefix}.defaultCoolingId: неизвестное охлаждение`);
+    }
   }
 
   return errors;

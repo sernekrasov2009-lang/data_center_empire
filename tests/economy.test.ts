@@ -8,6 +8,7 @@ import {
   cashForecast,
   createGame,
   daysUntilBill,
+  hardwareLoadW,
   hourlyElectricityCost,
   projectedMonthlyExpenses,
 } from "../src/sim";
@@ -43,33 +44,38 @@ describe("economy.json", () => {
 
 describe("электричество и счета", () => {
   it("считает почасовую стоимость через PUE", () => {
-    const pue = economy.electricity.pue[economy.start.location];
+    const state = createGame();
+    const pue = economy.electricity.pue[state.location.id as keyof typeof economy.electricity.pue];
     const price = getElectricityTariff(economy.start.electricityTariffId).pricePerKwh;
-    const expected = (economy.start.itLoadW / 1000) * pue * price;
-    expect(hourlyElectricityCost(1)).toBeCloseTo(expected, 10);
+    const expected = (hardwareLoadW(state) / 1000) * pue * price;
+    expect(hourlyElectricityCost(state, 1)).toBeCloseTo(expected, 10);
   });
 
   it("строит прогноз полного месячного счёта", () => {
-    const internet = getInternetPlan(economy.start.internetPlanId).pricePerMonth;
-    const projected = projectedMonthlyExpenses(1);
-    expect(projected.electricity).toBeCloseTo(hourlyElectricityCost(1) * HOURS_PER_MONTH, 10);
+    const state = createGame();
+    const internet = getInternetPlan(state.location.internetPlanId).pricePerMonth;
+    const projected = projectedMonthlyExpenses(state);
+    expect(projected.electricity).toBeCloseTo(hourlyElectricityCost(state, 1) * HOURS_PER_MONTH, 10);
     expect(projected.internet).toBe(internet);
-    expect(projected.rent).toBe(economy.start.rentPerMonth);
-    expect(projected.total).toBeCloseTo(projected.electricity + internet + economy.start.rentPerMonth, 10);
+    expect(projected.rent).toBe(0);
+    expect(projected.total).toBeCloseTo(projected.electricity + internet, 10);
   });
 
   it("колит электричество по часам, не трогая деньги до счёта", () => {
     const state = createGame();
     const result = advanceTicks(state, 10);
     expect(result.state.money).toBe(state.money);
-    expect(result.state.economy.accrual.electricity).toBeCloseTo(hourlyElectricityCost(1) * 10, 10);
+    expect(result.state.economy.accrual.electricity).toBeCloseTo(
+      hourlyElectricityCost(state) * 10,
+      10,
+    );
     expect(result.state.economy.reports).toHaveLength(0);
   });
 
   it("выставляет счёт в конце месяца и пишет отчёт", () => {
     const state = createGame();
     const result = advanceTicks(state, HOURS_PER_MONTH);
-    const projected = projectedMonthlyExpenses(state.economy.electricityPriceMult);
+    const projected = projectedMonthlyExpenses(state);
     const report = result.state.economy.reports.at(-1)!;
 
     expect(result.state.money).toBeCloseTo(state.money - projected.total, 8);
@@ -90,7 +96,7 @@ describe("электричество и счета", () => {
 
   it("прогнозирует уменьшение денег на каждый месяц", () => {
     const state = createGame({ money: 1000 });
-    const bill = projectedMonthlyExpenses(state.economy.electricityPriceMult).total;
+    const bill = projectedMonthlyExpenses(state).total;
     const forecast = cashForecast(state);
     expect(forecast).toHaveLength(3);
     forecast.forEach((row) => {

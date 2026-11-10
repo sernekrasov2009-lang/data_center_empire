@@ -6,6 +6,7 @@ import {
   cashForecast,
   daysUntilBill,
   fixedMonthlyCosts,
+  hardwareLoadW,
   projectedMonthlyExpenses,
 } from "../../sim";
 import { useGameStore } from "../../state/store";
@@ -51,7 +52,7 @@ export function ThisMonthPanel(): React.JSX.Element {
   const numberFormat = useGameStore((state) => state.settings.game.numberFormat);
   const game = useGameStore((state) => state.game);
 
-  const projected = projectedMonthlyExpenses(game.economy.electricityPriceMult);
+  const projected = projectedMonthlyExpenses(game);
   const days = daysUntilBill(game.time.hour);
   const elapsed = game.time.hour % HOURS_PER_MONTH;
 
@@ -86,12 +87,12 @@ export function ExpensesPanel(): React.JSX.Element {
   const t = useT();
   const language = useGameStore((state) => state.settings.game.language);
   const numberFormat = useGameStore((state) => state.settings.game.numberFormat);
-  const priceMult = useGameStore((state) => state.game.economy.electricityPriceMult);
+  const game = useGameStore((state) => state.game);
 
-  const projected = projectedMonthlyExpenses(priceMult);
-  const fixed = fixedMonthlyCosts();
-  const plan = getInternetPlan(economyData.start.internetPlanId);
-  const pue = economyData.electricity.pue[economyData.start.location];
+  const projected = projectedMonthlyExpenses(game);
+  const fixed = fixedMonthlyCosts(game);
+  const plan = getInternetPlan(game.location.internetPlanId);
+  const pue = economyData.electricity.pue[game.location.id as keyof typeof economyData.electricity.pue];
   const price = economyData.electricity.tariffs.find(
     (tariff) => tariff.id === economyData.start.electricityTariffId,
   );
@@ -108,9 +109,9 @@ export function ExpensesPanel(): React.JSX.Element {
         </div>
         <div className="econ-row__hint">
           {t("econ.hint.electricity", {
-            load: formatInt(economyData.start.itLoadW, language),
+            load: formatInt(hardwareLoadW(game), language),
             pue: String(pue).replace(".", language === "ru" ? "," : "."),
-            price: formatMoneyExact((price?.pricePerKwh ?? 0) * priceMult, language),
+            price: formatMoneyExact((price?.pricePerKwh ?? 0) * game.economy.electricityPriceMult, language),
           })}
         </div>
         <div className="econ-row">

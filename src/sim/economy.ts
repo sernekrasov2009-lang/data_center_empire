@@ -1,5 +1,5 @@
-import { economy as economyData, getDifficulty, getElectricityTariff, getInternetPlan, type LocationKind } from "../data";
-import { hardwareLoadW } from "./components";
+import { economy as economyData, getDifficulty, getElectricityTariff, getInternetPlan } from "../data";
+import { getLocation, totalPowerDrawW } from "./location";
 import { nextFloat } from "./core/rng";
 import { HOURS_PER_DAY, HOURS_PER_MONTH, getGameDate } from "./core/time";
 import type { EconomyState, ExpenseBreakdown, GameState, MonthlyReport } from "./types";
@@ -17,39 +17,43 @@ export function createEconomy(): EconomyState {
   };
 }
 
-function startLocation(): LocationKind {
-  return economyData.start.location;
-}
-
 /** Цена кВт·ч с учётом годового дрейфа. */
 export function electricityPricePerKwh(priceMult: number): number {
   return getElectricityTariff(economyData.start.electricityTariffId).pricePerKwh * priceMult;
 }
 
-/** Стоимость электричества за один игровой час при множителе цены и нагрузке. */
-export function hourlyElectricityCost(priceMult = 1, loadW = economyData.start.itLoadW): number {
-  const pue = economyData.electricity.pue[startLocation()];
-  return (loadW / 1000) * pue * electricityPricePerKwh(priceMult);
+/**
+ * Стоимость электричества за один игровой час: ИТ-нагрузка × PUE локации
+ * плюс явное потребление охлаждения.
+ */
+export function hourlyElectricityCost(
+  state: GameState,
+  priceMult = state.economy.electricityPriceMult,
+): number {
+  return (totalPowerDrawW(state) / 1000) * electricityPricePerKwh(priceMult);
 }
 
 /** Полный месяц электричества при текущей цене (для прогноза и подсказок). */
-export function monthElectricityCost(priceMult = 1, loadW = economyData.start.itLoadW): number {
-  return hourlyElectricityCost(priceMult, loadW) * HOURS_PER_MONTH;
+export function monthElectricityCost(
+  state: GameState,
+  priceMult = state.economy.electricityPriceMult,
+): number {
+  return hourlyElectricityCost(state, priceMult) * HOURS_PER_MONTH;
 }
 
-/** Постоянные месячные расходы: интернет по тарифу и аренда локации. */
-export function fixedMonthlyCosts(): { internet: number; rent: number } {
-  const plan = getInternetPlan(economyData.start.internetPlanId);
-  return { internet: plan.pricePerMonth, rent: economyData.start.rentPerMonth };
+/** Постоянные месячные расходы: интернет по выбранному тарифу и аренда локации. */
+export function fixedMonthlyCosts(state: GameState): { internet: number; rent: number } {
+  const plan = getInternetPlan(state.location.internetPlanId);
+  return { internet: plan.pricePerMonth, rent: getLocation(state).rentPerMonth };
 }
 
-/** Итоговый прогноз счёта за полный месяц при заданном множителе цены и нагрузке. */
+/** Итоговый прогноз счёта за полный месяц при заданном множителе цены. */
 export function projectedMonthlyExpenses(
-  priceMult: number,
-  loadW = economyData.start.itLoadW,
+  state: GameState,
+  priceMult = state.economy.electricityPriceMult,
 ): ExpenseBreakdown & { total: number } {
-  const fixed = fixedMonthlyCosts();
-  const electricity = monthElectricityCost(priceMult, loadW);
+  const fixed = fixedMonthlyCosts(state);
+  const electricity = monthElectricityCost(state, priceMult);
   return {
     electricity,
     internet: fixed.internet,
@@ -58,9 +62,9 @@ export function projectedMonthlyExpenses(
   };
 }
 
-/** Начисляет электричество за один прошедший час по текущей нагрузке железа. */
+/** Начисляет электричество за один прошедший час по текущей нагрузке. */
 export function accrueHour(state: GameState): GameState {
-  const cost = hourlyElectricityCost(state.economy.electricityPriceMult, hardwareLoadW(state));
+  const cost = hourlyElectricityCost(state);
   return {
     ...state,
     economy: {
@@ -85,7 +89,7 @@ export interface BillResult {
  * интернет и аренда. Отчёт попадает в историю, начисления обнуляются.
  */
 export function billMonth(state: GameState, hour: number): BillResult {
-  const fixed = fixedMonthlyCosts();
+  const fixed = fixedMonthlyCosts(state);
   const expenses: ExpenseBreakdown = {
     electricity: state.economy.accrual.electricity,
     internet: fixed.internet,
@@ -149,7 +153,7 @@ export function driftElectricityPrice(state: GameState): { state: GameState; pri
 
 /** Прогноз денег на N месяцев вперёд при текущем счёте и без дохода. */
 export function cashForecast(state: GameState, months = FORECAST_MONTHS): { month: number; money: number }[] {
-  const bill = projectedMonthlyExpenses(state.economy.electricityPriceMult, hardwareLoadW(state)).total;
+  const bill = projectedMonthlyExpenses(state).total;
   const result: { month: number; money: number }[] = [];
   for (let index = 1; index <= months; index += 1) {
     result.push({ month: index, money: state.money - bill * index });

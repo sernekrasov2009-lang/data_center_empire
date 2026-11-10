@@ -11,7 +11,7 @@ const ITEMS: readonly NavItem[] = [
   { key: "nav.dashboard", ready: true, view: "dashboard" },
   { key: "nav.build", ready: true, view: "build" },
   { key: "nav.warehouse", ready: true, view: "warehouse" },
-  { key: "nav.location", ready: false },
+  { key: "nav.location", ready: true, view: "location" },
   { key: "nav.services", ready: false },
   { key: "nav.infra", ready: false },
   { key: "nav.staff", ready: false },

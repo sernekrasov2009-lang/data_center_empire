@@ -2,6 +2,7 @@ export * from "./types";
 export * from "./engine";
 export * from "./economy";
 export * from "./components";
+export * from "./location";
 export * from "./hardware";
 export { createRng, nextUint32, nextFloat, nextInt, chance, pick } from "./core/rng";
 export {

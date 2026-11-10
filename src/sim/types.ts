@@ -1,4 +1,4 @@
-import type { ComponentCondition, DifficultyId, Speed } from "../data";
+import type { ComponentCondition, DifficultyId, PowerOffReason, Speed } from "../data";
 
 export type { Speed };
 
@@ -28,7 +28,13 @@ export type SimEventKind =
   | "partFailed"
   | "partRepaired"
   | "usedMarketUpdated"
-  | "marketPriceChanged";
+  | "marketPriceChanged"
+  | "breakerTripped"
+  | "serversShutdown"
+  | "serversRestarted"
+  | "noiseComplaint"
+  | "noiseFine"
+  | "neighborsShutdown";
 
 export interface SimEvent {
   id: number;
@@ -127,6 +133,8 @@ export interface HardwareBuild {
   startedAtHour: number;
   readyAtHour: number;
   parts: BuildPart[];
+  /** Слот локации, в котором стоит сервер; null — собран, но не размещён. */
+  slot: number | null;
 }
 
 export type OrderKind = "new" | "used";
@@ -180,6 +188,30 @@ export interface HardwareState {
   nextLotId: number;
 }
 
+/* ── Локация, охлаждение и соседи (этап 4) ───────────────────────── */
+
+export interface LocationState {
+  /** id локации из location.json. */
+  id: string;
+  coolingId: string;
+  /** Купленные варианты охлаждения: переключение между ними бесплатно. */
+  ownedCooling: string[];
+  internetPlanId: string;
+  /** Почему серверы выключены; "none" — всё работает. */
+  powerOff: PowerOffReason;
+  /** Сколько часов подряд нагрузка превышает ёмкость автомата. */
+  overloadHours: number;
+  /** Раздражение соседей, 0…100. */
+  irritation: number;
+  lastComplaintHour: number;
+  lastFineHour: number;
+  insulated: boolean;
+  /** Наружная температура, °C. */
+  outsideTempC: number;
+  /** Температура в комнате, °C. */
+  roomTempC: number;
+}
+
 export interface GameState {
   version: number;
   seed: number;
@@ -190,6 +222,7 @@ export interface GameState {
   difficulty: DifficultyId;
   economy: EconomyState;
   hardware: HardwareState;
+  location: LocationState;
   /** Заполняется, когда игра закончена (банкротство). */
   gameOver: GameOverInfo | null;
   stats: GameStats;

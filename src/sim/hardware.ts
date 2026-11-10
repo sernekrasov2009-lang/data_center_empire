@@ -10,6 +10,7 @@ import {
   validateBuild,
   type BuildError,
 } from "./components";
+import { assignFreeSlot, serversRunning } from "./location";
 import type {
   GameState,
   HardwareBuild,
@@ -99,6 +100,7 @@ function startingBuild(): HardwareBuild {
     startedAtHour: 0,
     readyAtHour: 0,
     parts,
+    slot: 0,
   };
 }
 
@@ -372,7 +374,12 @@ export function startBuild(
       broken: false,
       repairDoneHour: null,
     })),
+    slot: null,
   };
+
+  if (build.status === "ready") {
+    assignFreeSlot(next, build);
+  }
 
   next.hardware.parts = next.hardware.parts.filter((part) => !unique.includes(part.id));
   next.hardware.builds.push(build);
@@ -483,6 +490,7 @@ export function tickHardware(state: GameState): { state: GameState; events: Hard
   for (const build of next.hardware.builds) {
     if (build.status === "assembling" && hour >= build.readyAtHour) {
       build.status = "ready";
+      assignFreeSlot(next, build);
       events.push({ kind: "buildCompleted", amount: buildValue(build), ref: String(build.id) });
     }
   }
@@ -498,7 +506,7 @@ export function tickHardware(state: GameState): { state: GameState; events: Hard
     }
   }
 
-  if (hour % HOURS_PER_DAY === 0) {
+  if (hour % HOURS_PER_DAY === 0 && serversRunning(next)) {
     const failureRateMult = getDifficulty(next.difficulty).failureRateMult;
     for (const build of next.hardware.builds) {
       if (build.status !== "ready") continue;
@@ -512,7 +520,7 @@ export function tickHardware(state: GameState): { state: GameState; events: Hard
             component,
             part.condition,
             ageYears,
-            hardwareData.ambientTempC,
+            next.location.roomTempC,
             failureRateMult,
           );
           if (!chance(next.rng, probability)) continue;

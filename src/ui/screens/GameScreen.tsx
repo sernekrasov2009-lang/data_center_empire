@@ -2,6 +2,7 @@ import { useGameStore } from "../../state/store";
 import { BuildScreen } from "../components/BuildScreen";
 import { DashboardScreen } from "../components/DashboardScreen";
 import { EventFeed } from "../components/EventFeed";
+import { LocationScreen } from "../components/LocationScreen";
 import { NavRail } from "../components/NavRail";
 import { StatusBar } from "../components/StatusBar";
 import { TopBar } from "../components/TopBar";
@@ -18,6 +19,7 @@ export function GameScreen(): React.JSX.Element {
         <main className="work">
           {view === "build" && <BuildScreen />}
           {view === "warehouse" && <WarehouseScreen />}
+          {view === "location" && <LocationScreen />}
           {view === "dashboard" && <DashboardScreen />}
         </main>
         <EventFeed />

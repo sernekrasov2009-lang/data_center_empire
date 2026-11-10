@@ -68,6 +68,18 @@ export function EventFeed(): React.JSX.Element {
                   {event.kind === "usedMarketUpdated" && t("feed.usedMarketUpdated")}
                   {event.kind === "marketPriceChanged" &&
                     t("feed.marketPriceChanged", { mult: (event.amount ?? 1).toFixed(3) })}
+                  {event.kind === "breakerTripped" &&
+                    t("feed.breakerTripped", { load: Math.round(event.amount ?? 0) })}
+                  {event.kind === "serversShutdown" &&
+                    t("feed.serversShutdown", { temp: (event.amount ?? 0).toFixed(1) })}
+                  {event.kind === "serversRestarted" && t("feed.serversRestarted")}
+                  {event.kind === "noiseComplaint" &&
+                    t("feed.noiseComplaint", { db: (event.amount ?? 0).toFixed(1) })}
+                  {event.kind === "noiseFine" &&
+                    t("feed.noiseFine", {
+                      amount: formatMoney(-(event.amount ?? 0), language, numberFormat),
+                    })}
+                  {event.kind === "neighborsShutdown" && t("feed.neighborsShutdown")}
                 </span>
               </li>
             );

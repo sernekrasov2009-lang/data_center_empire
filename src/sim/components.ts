@@ -1,12 +1,11 @@
 import {
-  economy as economyData,
   getComponent,
   hardware as hardwareData,
   type Component,
   type ComponentCondition,
   type ComponentType,
 } from "../data";
-import type { GameState, HardwareBuild } from "./types";
+import type { HardwareBuild } from "./types";
 
 /** Округление денег до центов. */
 export function roundMoney(value: number): number {
@@ -115,11 +114,9 @@ export function buildPowerW(build: HardwareBuild): number {
   return build.parts.reduce((sum, part) => sum + getComponent(part.componentId).power, 0);
 }
 
-/** Текущая ИТ-нагрузка: сумма готовых сборок, иначе стартовые 100 Вт из economy.json. */
-export function hardwareLoadW(state: GameState): number {
-  const ready = state.hardware.builds.filter((build) => build.status === "ready");
-  if (ready.length === 0) return economyData.start.itLoadW;
-  return ready.reduce((sum, build) => sum + buildPowerW(build), 0);
+/** Шум готового сервера по логарифмической сумме деталей, дБ. */
+export function buildNoiseDb(build: HardwareBuild): number {
+  return noiseSum(build.parts.map((part) => getComponent(part.componentId).noiseDb));
 }
 
 /** Сколько игровых часов займёт сборка у себя. */

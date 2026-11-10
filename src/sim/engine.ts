@@ -3,10 +3,11 @@ import { createRng } from "./core/rng";
 import { HOURS_PER_DAY, HOURS_PER_MONTH, HOURS_PER_YEAR } from "./core/time";
 import { accrueHour, billMonth, createEconomy, driftElectricityPrice } from "./economy";
 import { createHardware, driftMarketPrice, refreshUsedMarket, tickHardware } from "./hardware";
+import { cloneLocation, createLocation, tickLocation } from "./location";
 import type { GameState, SimEvent, Speed } from "./types";
 
 /** Версия структуры GameState. Меняется при миграциях сохранений. */
-export const GAME_STATE_VERSION = 4;
+export const GAME_STATE_VERSION = 5;
 
 export const DEFAULT_COMPANY_NAME = "Uptime Hosting";
 
@@ -39,6 +40,7 @@ export function createGame(options: NewGameOptions = {}): GameState {
     difficulty,
     economy: createEconomy(),
     hardware: createHardware(),
+    location: createLocation(),
     gameOver: null,
     stats: { ticks: 0 },
     events: [],
@@ -93,6 +95,7 @@ export function advanceTicks(state: GameState, ticks: number): AdvanceResult {
       reports: state.economy.reports.slice(),
       lifetime: { ...state.economy.lifetime },
     },
+    location: cloneLocation(state.location),
     events: state.events.slice(),
   };
 
@@ -109,6 +112,12 @@ export function advanceTicks(state: GameState, ticks: number): AdvanceResult {
     const hardwareTick = tickHardware(next);
     next = hardwareTick.state;
     for (const event of hardwareTick.events) {
+      pushEvent(next, events, event.kind, next.time.hour, event.amount, event.ref);
+    }
+
+    const locationTick = tickLocation(next);
+    next = locationTick.state;
+    for (const event of locationTick.events) {
       pushEvent(next, events, event.kind, next.time.hour, event.amount, event.ref);
     }
 
