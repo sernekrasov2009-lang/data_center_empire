@@ -5,6 +5,7 @@ export * from "./components";
 export * from "./location";
 export * from "./hardware";
 export * from "./services";
+export * from "./bot";
 export { createRng, nextUint32, nextFloat, nextInt, chance, pick } from "./core/rng";
 export {
   HOURS_PER_DAY,
