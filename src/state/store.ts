@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { balance, findComponent } from "../data";
-import type { DifficultyId } from "../data";
+import type { DifficultyId, ServiceId } from "../data";
 import type { Language } from "../i18n/language";
 import { platform } from "../platform";
 import type { MonitorInfo } from "../platform/api";
@@ -22,6 +22,9 @@ import {
   setBuildSlot as applySetBuildSlot,
   setCooling as applySetCooling,
   setInternetPlan as applySetInternetPlan,
+  setServiceLimit as applySetServiceLimit,
+  setServicePrice as applySetServicePrice,
+  toggleService as applyToggleService,
   setPaused,
   setSpeed as applySpeed,
   startBuild as applyStartBuild,
@@ -29,6 +32,7 @@ import {
   type GameState,
   type HardwareFailure,
   type LocationFailure,
+  type ServiceFailure,
   type SimEvent,
   type Speed,
 } from "../sim";
@@ -37,7 +41,7 @@ import { createDefaultSettings, mergeSettings, type Settings } from "./settings"
 import { formatMoney } from "../ui/format";
 
 export type Screen = "menu" | "game";
-export type GameView = "dashboard" | "build" | "warehouse" | "location";
+export type GameView = "dashboard" | "build" | "warehouse" | "location" | "services";
 export type Overlay = "newGame" | "slots" | "pause" | "settings" | "gameOver" | null;
 export type SlotMode = "save" | "load";
 export type ToastKind = "info" | "warn" | "error";
@@ -131,6 +135,9 @@ interface GameStore {
   buyInsulation: () => void;
   resetBreaker: () => void;
   restartServers: () => void;
+  setServicePrice: (serviceId: ServiceId, priceMult: number) => void;
+  toggleService: (serviceId: ServiceId) => void;
+  setServiceLimit: (serviceId: ServiceId, limit: number) => void;
 
   requestConfirm: (request: ConfirmRequest) => void;
   resolveConfirm: (accepted: boolean) => void;
@@ -210,6 +217,10 @@ export const useGameStore = create<GameStore>((set, get) => {
 
   function notifyLocationFailure(failure: LocationFailure): void {
     notify(`location.error.${failure.code}`, failure.params, "error");
+  }
+
+  function notifyServiceFailure(failure: ServiceFailure): void {
+    notify(`services.error.${failure.code}`, failure.params, "error");
   }
 
   async function autosave(): Promise<void> {
@@ -580,6 +591,36 @@ export const useGameStore = create<GameStore>((set, get) => {
       notify("toast.serversRestarted");
     },
 
+    setServicePrice: (serviceId, priceMult) => {
+      const result = applySetServicePrice(get().game, serviceId, priceMult);
+      if (!result.ok) {
+        notifyServiceFailure(result.failure);
+        return;
+      }
+      set({ game: result.state, dirty: true });
+      notify("toast.servicePrice");
+    },
+
+    toggleService: (serviceId) => {
+      const result = applyToggleService(get().game, serviceId);
+      if (!result.ok) {
+        notifyServiceFailure(result.failure);
+        return;
+      }
+      set({ game: result.state, dirty: true });
+      notify("toast.serviceToggled");
+    },
+
+    setServiceLimit: (serviceId, limit) => {
+      const result = applySetServiceLimit(get().game, serviceId, limit);
+      if (!result.ok) {
+        notifyServiceFailure(result.failure);
+        return;
+      }
+      set({ game: result.state, dirty: true });
+      notify("toast.serviceLimit");
+    },
+
     requestConfirm: (request) => set({ confirm: request }),
     resolveConfirm: (accepted) => {
       const request = get().confirm;
@@ -764,6 +805,16 @@ export const useGameStore = create<GameStore>((set, get) => {
       const neighbors = result.events.find((event) => event.kind === "neighborsShutdown");
       if (neighbors) {
         notify("toast.neighborsShutdown", undefined, "error");
+      }
+
+      const joined = result.events.find((event) => event.kind === "clientsJoined");
+      if (joined) {
+        notify("toast.clientsJoined", { count: Math.round(joined.amount ?? 0) });
+      }
+
+      const left = result.events.find((event) => event.kind === "clientsLeft");
+      if (left) {
+        notify("toast.clientsLeft", { count: Math.round(left.amount ?? 0) }, "warn");
       }
 
       if (result.state.gameOver && !game.gameOver) {

@@ -1,4 +1,4 @@
-import type { ComponentCondition, DifficultyId, PowerOffReason, Speed } from "../data";
+import type { ComponentCondition, DifficultyId, PowerOffReason, ServiceId, Speed } from "../data";
 
 export type { Speed };
 
@@ -34,7 +34,9 @@ export type SimEventKind =
   | "serversRestarted"
   | "noiseComplaint"
   | "noiseFine"
-  | "neighborsShutdown";
+  | "neighborsShutdown"
+  | "clientsJoined"
+  | "clientsLeft";
 
 export interface SimEvent {
   id: number;
@@ -212,6 +214,40 @@ export interface LocationState {
   roomTempC: number;
 }
 
+/* ── Услуги и клиенты (этап 5) ────────────────────────────────────── */
+
+/** Выставленные игроком параметры одной услуги. */
+export interface ServiceState {
+  id: ServiceId;
+  /** Цена $/мес; хранится как доля от рыночной (1 = рыночная). */
+  priceMult: number;
+  enabled: boolean;
+  /** 0 — без ограничения. */
+  clientLimit: number;
+}
+
+/** Один клиент: подписан на услугу и живёт на конкретном сервере. */
+export interface ClientState {
+  id: number;
+  serviceId: ServiceId;
+  /** Сборка, на которой размещён клиент. */
+  buildId: number;
+  /** Игровой час, с которого клиент платит. */
+  sinceHour: number;
+  /** Фактическая цена $/мес на момент подписки. */
+  pricePerMonth: number;
+}
+
+export interface ServicesState {
+  services: ServiceState[];
+  clients: ClientState[];
+  /** Выручка, накопленная с начала месяца, $. */
+  monthRevenue: number;
+  /** Выручка, начисленная за последний полный час, $ (для панели). */
+  lastHourRevenue: number;
+  nextClientId: number;
+}
+
 export interface GameState {
   version: number;
   seed: number;
@@ -223,6 +259,7 @@ export interface GameState {
   economy: EconomyState;
   hardware: HardwareState;
   location: LocationState;
+  services: ServicesState;
   /** Заполняется, когда игра закончена (банкротство). */
   gameOver: GameOverInfo | null;
   stats: GameStats;

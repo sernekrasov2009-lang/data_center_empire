@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "demand": {
+    "reputationStart": 0.7,
+    "priceElasticity": 1.5,
+    "priceMinMult": 0.5,
+    "priceMaxMult": 2.0
+  },
+  "churn": {
+    "baseMonthly": 0.03,
+    "pricePenaltyMonthly": 0.02,
+    "pricePenaltyFrom": 1.2
+  },
+  "services": [
+    {
+      "id": "landing",
+      "coresPerClient": 0.05,
+      "ramGbPerClient": 0.25,
+      "storageGbPerClient": 1,
+      "mbitPerClient": 0.05,
+      "pricePerMonth": 4,
+      "slaPercent": 98,
+      "baseDemandPerDay": 0.8
+    },
+    {
+      "id": "cms",
+      "coresPerClient": 0.2,
+      "ramGbPerClient": 1,
+      "storageGbPerClient": 5,
+      "mbitPerClient": 0.2,
+      "pricePerMonth": 12,
+      "slaPercent": 99,
+      "baseDemandPerDay": 0.5
+    },
+    {
+      "id": "chatbot",
+      "coresPerClient": 0.1,
+      "ramGbPerClient": 0.5,
+      "storageGbPerClient": 1,
+      "mbitPerClient": 0.1,
+      "pricePerMonth": 8,
+      "slaPercent": 99,
+      "baseDemandPerDay": 0.4
+    }
+  ]
+}

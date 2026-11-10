@@ -11,6 +11,7 @@ import {
   hardwareLoadW,
   hourlyElectricityCost,
   projectedMonthlyExpenses,
+  projectedMonthlyIncome,
 } from "../src/sim";
 
 describe("economy.json", () => {
@@ -97,10 +98,11 @@ describe("электричество и счета", () => {
   it("прогнозирует уменьшение денег на каждый месяц", () => {
     const state = createGame({ money: 1000 });
     const bill = projectedMonthlyExpenses(state).total;
+    const income = projectedMonthlyIncome(state);
     const forecast = cashForecast(state);
     expect(forecast).toHaveLength(3);
     forecast.forEach((row) => {
-      expect(row.money).toBeCloseTo(1000 - bill * row.month, 8);
+      expect(row.money).toBeCloseTo(1000 + (income - bill) * row.month, 8);
     });
   });
 

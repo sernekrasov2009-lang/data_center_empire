@@ -6,6 +6,8 @@ import {
   getLocationDefinition,
   hardware as hardwareData,
   locationData,
+  servicesData,
+  type ServiceId,
   type DifficultyId,
   type PowerOffReason,
 } from "../data";
@@ -16,7 +18,10 @@ import {
   createHardware,
   createLocation,
   createRng,
+  createServices,
   refreshUsedMarket,
+  type ServiceState,
+  type ServicesState,
 } from "../sim";
 import type {
   BuildPart,
@@ -76,6 +81,8 @@ const EVENT_KINDS: readonly SimEvent["kind"][] = [
   "noiseComplaint",
   "noiseFine",
   "neighborsShutdown",
+  "clientsJoined",
+  "clientsLeft",
 ];
 
 function asEvents(value: unknown): SimEvent[] {
@@ -395,6 +402,74 @@ function asLocation(value: unknown): LocationState {
   };
 }
 
+/** Санитизация блока услуг: цена и лимит в границах, клиенты с корректными ссылками. */
+function asServices(value: unknown, hardware: HardwareState): ServicesState {
+  const fallback = createServices();
+  if (!isRecord(value)) return fallback;
+
+  const validIds = new Set<string>(servicesData.services.map((service) => service.id));
+  const entries = Array.isArray(value.services)
+    ? value.services
+        .map((item): ServiceState | null => {
+          if (!isRecord(item)) return null;
+          const id = typeof item.id === "string" && validIds.has(item.id)
+            ? (item.id as ServiceState["id"])
+            : null;
+          if (id === null) return null;
+          const priceMult = asNumber(item.priceMult, 1);
+          const limit = Math.floor(asNumber(item.clientLimit, 0));
+          return {
+            id: id as ServiceState["id"],
+            priceMult: Math.min(
+              servicesData.demand.priceMaxMult,
+              Math.max(servicesData.demand.priceMinMult, priceMult),
+            ),
+            enabled: item.enabled === true,
+            clientLimit: Math.min(100000, Math.max(0, limit)),
+          };
+        })
+        .filter((entry): entry is ServiceState => entry !== null)
+    : [];
+
+  const services: ServiceState[] = fallback.services.map((base) => {
+    const found = entries.find((entry) => entry.id === base.id);
+    return found ?? base;
+  });
+
+  const buildIds = new Set<number>(hardware.builds.map((build) => build.id));
+
+  const clients = Array.isArray(value.clients)
+    ? value.clients
+        .map((item) => {
+          if (!isRecord(item)) return null;
+          const serviceId = typeof item.serviceId === "string" && validIds.has(item.serviceId)
+            ? (item.serviceId as ServiceState["id"])
+            : null;
+          const buildId = Math.floor(asNumber(item.buildId, 0));
+          const id = Math.floor(asNumber(item.id, 0));
+          if (serviceId === null || !buildIds.has(buildId) || id < 1) return null;
+          return {
+            id,
+            serviceId: serviceId as ServiceId,
+            buildId,
+            sinceHour: Math.max(0, Math.floor(asNumber(item.sinceHour, 0))),
+            pricePerMonth: Math.max(0, asNumber(item.pricePerMonth, 0)),
+          };
+        })
+        .filter((client): client is NonNullable<typeof client> => client !== null)
+    : [];
+
+  const maxClientId = clients.reduce((max, client) => Math.max(max, client.id), 0);
+
+  return {
+    services,
+    clients,
+    monthRevenue: Math.max(0, asNumber(value.monthRevenue, 0)),
+    lastHourRevenue: Math.max(0, asNumber(value.lastHourRevenue, 0)),
+    nextClientId: Math.max(1, maxClientId + 1, Math.floor(asNumber(value.nextClientId, 1))),
+  };
+}
+
 /**
  * Приводит слоты сборок в согласованный вид: один сервер — один слот,
  * лишние слоты снимаются, готовые серверы автоматически занимают свободные места.
@@ -493,6 +568,8 @@ export function migrateGame(raw: unknown): GameState {
     economy: asEconomy(raw.economy),
     hardware: asHardware(raw.hardware),
     location: asLocation(raw.location),
+    // блок services зависит от сборок, поэтому после hardware
+    services: asServices(raw.services, asHardware(raw.hardware)),
     gameOver: asGameOver(raw.gameOver),
     stats: { ticks: Math.max(0, Math.floor(isRecord(raw.stats) ? asNumber(raw.stats.ticks, 0) : 0)) },
     events: asEvents(raw.events),
@@ -507,6 +584,7 @@ export function migrateGame(raw: unknown): GameState {
 
   // Миграция 3 → 4: появилось железо. Пустой б/у рынок наполняем сразу.
   // Миграция 4 → 5: появилась локация; готовые серверы получают слоты.
+  // Миграция 5 → 6: появились услуги и клиенты; пустой блок создаётся с дефолтами.
   const withSlots = reconcileSlots(game);
   return refreshUsedMarket(withSlots).state;
 }

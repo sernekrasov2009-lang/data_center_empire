@@ -3,6 +3,7 @@ import rawComponents from "./components.json";
 import rawDifficulties from "./difficulties.json";
 import rawEconomy from "./economy.json";
 import rawLocation from "./location.json";
+import rawServices from "./services.json";
 
 /** Скорости игры. 0 — пауза (DESIGN.md, разд. 1). */
 export type Speed = 0 | 1 | 5 | 20 | 60;
@@ -491,6 +492,116 @@ export function validateLocation(data: LocationFile): string[] {
     }
     if (!coolingIds.includes(definition.defaultCoolingId)) {
       errors.push(`${prefix}.defaultCoolingId: неизвестное охлаждение`);
+    }
+  }
+
+  return errors;
+}
+
+/* ── Услуги и клиенты (DESIGN.md, разд. 5) ───────────────────────── */
+
+/** Ключ услуги; пока три стартовых, расширится исследованиями. */
+export type ServiceId = "landing" | "cms" | "chatbot";
+
+export const SERVICE_IDS: readonly ServiceId[] = ["landing", "cms", "chatbot"];
+
+export interface ServiceDefinition {
+  id: ServiceId;
+  /** Доля ядра ЦП на одного клиента. */
+  coresPerClient: number;
+  ramGbPerClient: number;
+  storageGbPerClient: number;
+  /** Полоса интернета на клиента, Мбит/с. */
+  mbitPerClient: number;
+  /** Рыночная цена, $/мес; цена игрока ограничена 50–200% от неё. */
+  pricePerMonth: number;
+  slaPercent: number;
+  /** Базовый спрос M в формуле λ (DESIGN.md, разд. 5.2). */
+  baseDemandPerDay: number;
+}
+
+export interface ServicesFile {
+  version: number;
+  demand: {
+    /** Стартовая репутация; сама репутация появится на этапе 7. */
+    reputationStart: number;
+    /** Степень в (P / P_рынок)^(−эластичность). */
+    priceElasticity: number;
+    priceMinMult: number;
+    priceMaxMult: number;
+  };
+  churn: {
+    baseMonthly: number;
+    /** Добавка к оттоку за цену выше pricePenaltyFrom × рыночная. */
+    pricePenaltyMonthly: number;
+    pricePenaltyFrom: number;
+  };
+  services: ServiceDefinition[];
+}
+
+export const servicesData = rawServices as ServicesFile;
+
+export function getService(id: ServiceId): ServiceDefinition {
+  const service = servicesData.services.find((candidate) => candidate.id === id);
+  if (!service) throw new Error(`Неизвестная услуга: ${id}`);
+  return service;
+}
+
+/** Проверка services.json: три стартовые услуги, спрос и отток в разумных пределах. */
+export function validateServices(data: ServicesFile): string[] {
+  const errors: string[] = [];
+
+  if (!Number.isInteger(data.version) || data.version < 1) {
+    errors.push("version: ожидается целое число ≥ 1");
+  }
+
+  const demand = data.demand;
+  if (!(demand.reputationStart > 0 && demand.reputationStart <= 1.5)) {
+    errors.push("demand.reputationStart: ожидается 0…1,5");
+  }
+  if (!(demand.priceElasticity > 0) || demand.priceElasticity > 5) {
+    errors.push("demand.priceElasticity: ожидается 0…5");
+  }
+  if (!(demand.priceMinMult > 0 && demand.priceMinMult < 1)) {
+    errors.push("demand.priceMinMult: ожидается 0…1");
+  }
+  if (!(demand.priceMaxMult > 1 && demand.priceMaxMult <= 3)) {
+    errors.push("demand.priceMaxMult: ожидается 1…3");
+  }
+
+  const churn = data.churn;
+  if (!(churn.baseMonthly >= 0 && churn.baseMonthly < 1)) {
+    errors.push("churn.baseMonthly: ожидается 0…1");
+  }
+  if (!(churn.pricePenaltyMonthly >= 0) || churn.baseMonthly + churn.pricePenaltyMonthly >= 1) {
+    errors.push("churn.pricePenaltyMonthly: суммарный месячный отток должен быть < 1");
+  }
+  if (!(churn.pricePenaltyFrom >= 1 && churn.pricePenaltyFrom <= 2)) {
+    errors.push("churn.pricePenaltyFrom: ожидается 1…2");
+  }
+
+  const ids = data.services.map((service) => service.id);
+  for (const expected of SERVICE_IDS) {
+    if (!ids.includes(expected)) errors.push(`services: нет услуги ${expected}`);
+  }
+  if (new Set(ids).size !== ids.length) {
+    errors.push("services: id должны быть уникальны");
+  }
+  for (const service of data.services) {
+    const prefix = `services.${service.id}`;
+    if (!SERVICE_IDS.includes(service.id)) errors.push(`${prefix}.id: неизвестная услуга`);
+    if (!(service.coresPerClient > 0)) errors.push(`${prefix}.coresPerClient: должно быть > 0`);
+    if (!(service.ramGbPerClient > 0)) errors.push(`${prefix}.ramGbPerClient: должно быть > 0`);
+    if (!(service.storageGbPerClient > 0)) errors.push(`${prefix}.storageGbPerClient: должно быть > 0`);
+    if (!(service.mbitPerClient > 0)) errors.push(`${prefix}.mbitPerClient: должно быть > 0`);
+    if (!(service.pricePerMonth > 0) || service.pricePerMonth > 500) {
+      errors.push(`${prefix}.pricePerMonth: ожидается 0…500`);
+    }
+    if (!(service.slaPercent >= 90 && service.slaPercent <= 100)) {
+      errors.push(`${prefix}.slaPercent: ожидается 90…100`);
+    }
+    if (!(service.baseDemandPerDay > 0) || service.baseDemandPerDay > 50) {
+      errors.push(`${prefix}.baseDemandPerDay: ожидается 0…50`);
     }
   }
 

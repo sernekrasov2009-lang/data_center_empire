@@ -1,5 +1,6 @@
 import { economy as economyData, getDifficulty, getElectricityTariff, getInternetPlan } from "../data";
 import { getLocation, totalPowerDrawW } from "./location";
+import { accrueRevenueHour, closeMonthRevenue, projectedMonthlyRevenue } from "./services";
 import { nextFloat } from "./core/rng";
 import { HOURS_PER_DAY, HOURS_PER_MONTH, getGameDate } from "./core/time";
 import type { EconomyState, ExpenseBreakdown, GameState, MonthlyReport } from "./types";
@@ -62,11 +63,17 @@ export function projectedMonthlyExpenses(
   };
 }
 
-/** Начисляет электричество за один прошедший час по текущей нагрузке. */
+/** Прогноз дохода за полный месяц при текущих клиентах и цене. */
+export function projectedMonthlyIncome(state: GameState): number {
+  return projectedMonthlyRevenue(state);
+}
+
+/** Начисляет электричество и выручку за один прошедший час. */
 export function accrueHour(state: GameState): GameState {
-  const cost = hourlyElectricityCost(state);
+  const withRevenue = accrueRevenueHour(state);
+  const cost = hourlyElectricityCost(withRevenue);
   return {
-    ...state,
+    ...withRevenue,
     economy: {
       ...state.economy,
       accrual: {
@@ -90,22 +97,23 @@ export interface BillResult {
  */
 export function billMonth(state: GameState, hour: number): BillResult {
   const fixed = fixedMonthlyCosts(state);
+  const closed = getGameDate(Math.max(0, hour - 1));
+  const revenue = closeMonthRevenue(state.services);
   const expenses: ExpenseBreakdown = {
     electricity: state.economy.accrual.electricity,
     internet: fixed.internet,
     rent: fixed.rent,
   };
   const totalExpenses = expenses.electricity + expenses.internet + expenses.rent;
-  const moneyAfter = state.money - totalExpenses;
-  const closed = getGameDate(Math.max(0, hour - 1));
+  const moneyAfter = state.money + revenue.revenue - totalExpenses;
   const report: MonthlyReport = {
     hour,
     year: closed.year,
     month: closed.month,
-    revenue: 0,
+    revenue: revenue.revenue,
     expenses,
     totalExpenses,
-    net: -totalExpenses,
+    net: revenue.revenue - totalExpenses,
     moneyAfter,
   };
 
@@ -116,6 +124,7 @@ export function billMonth(state: GameState, hour: number): BillResult {
   return {
     state: {
       ...state,
+      services: revenue.services,
       money: moneyAfter,
       economy: {
         ...state.economy,
@@ -151,12 +160,13 @@ export function driftElectricityPrice(state: GameState): { state: GameState; pri
   };
 }
 
-/** Прогноз денег на N месяцев вперёд при текущем счёте и без дохода. */
+/** Прогноз денег на N месяцев вперёд при текущем счёте и доходе. */
 export function cashForecast(state: GameState, months = FORECAST_MONTHS): { month: number; money: number }[] {
   const bill = projectedMonthlyExpenses(state).total;
+  const income = projectedMonthlyIncome(state);
   const result: { month: number; money: number }[] = [];
   for (let index = 1; index <= months; index += 1) {
-    result.push({ month: index, money: state.money - bill * index });
+    result.push({ month: index, money: state.money + (income - bill) * index });
   }
   return result;
 }

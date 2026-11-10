@@ -2645,6 +2645,57 @@ button {
   color: var(--muted);
 }
 
+/* ── Услуги и клиенты (этап 5) ─────────────────────────────────── */
+
+.services .location__grid {
+  margin-top: 14px;
+}
+
+.svc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.svc-slider {
+  width: 100%;
+  accent-color: #35f5a1;
+}
+
+.svc-slider__value {
+  font-family: var(--mono);
+  color: var(--info);
+}
+
+.svc-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(8, 15, 26, 0.8);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.svc-input:focus {
+  border-color: rgba(53, 245, 161, 0.5);
+  outline: none;
+}
+
+.services .panel .btn {
+  margin-top: 10px;
+  align-self: flex-start;
+}
+
+.services .panel[data-service] {
+  display: flex;
+  flex-direction: column;
+}
+
 @media (max-width: 1100px) {
   .location__grid {
     grid-template-columns: minmax(0, 1fr);

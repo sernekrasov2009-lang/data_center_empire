@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SERVICE_IDS } from "../src/data";
 import { GAME_STATE_VERSION, createGame } from "../src/sim";
 import { buildSaveMeta } from "../src/save/meta";
 import { SaveError, buildEnvelope, migrateGame, parseSave } from "../src/save/migrate";
@@ -17,6 +18,8 @@ const legacy = {
   ],
   nextEventId: 3,
 };
+
+const SERVICE_IDS_SET = new Set<string>(SERVICE_IDS);
 
 describe("миграции сохранений", () => {
   it("поднимает сохранение версии 1 до текущей", () => {
@@ -248,5 +251,78 @@ describe("миграции сохранений", () => {
       "noiseFine",
       "neighborsShutdown",
     ]);
+  });
+
+  it("создаёт пустые услуги при миграции с версии 5", () => {
+    const source = createGame();
+    const { services, ...withoutServices } = source;
+    const game = migrateGame({ ...withoutServices, version: 5 });
+    expect(game.version).toBe(GAME_STATE_VERSION);
+    expect(game.services.services).toHaveLength(3);
+    expect(game.services.clients).toEqual([]);
+    expect(game.services.monthRevenue).toBe(0);
+    expect(game.services.services.every((service) => service.priceMult === 1)).toBe(true);
+    expect(game.services.services.every((service) => service.enabled === false)).toBe(true);
+  });
+
+  it("чистит испорченный блок услуг", () => {
+    const source = createGame();
+    const game = migrateGame({
+      ...source,
+      services: {
+        services: [
+          { id: "landing", priceMult: 99, enabled: true, clientLimit: -5 },
+          { id: "nope", priceMult: 0.1, enabled: true, clientLimit: 10 },
+        ],
+        clients: [
+          { id: 1, serviceId: "cms", buildId: 999, sinceHour: 5, pricePerMonth: 12 },
+          { id: 2, serviceId: "nope", buildId: 1, sinceHour: 5, pricePerMonth: 8 },
+          { id: 0, serviceId: "chatbot", buildId: 1, sinceHour: 5, pricePerMonth: 8 },
+        ],
+        monthRevenue: -10,
+        nextClientId: 0,
+      },
+    });
+    expect(game.services.services).toHaveLength(3);
+    const landing = game.services.services.find((service) => service.id === "landing")!;
+    expect(landing.priceMult).toBe(2);
+    expect(landing.enabled).toBe(true);
+    expect(landing.clientLimit).toBe(0);
+    expect(game.services.services.every((service) => SERVICE_IDS_SET.has(service.id))).toBe(true);
+    expect(game.services.clients).toEqual([]);
+    expect(game.services.monthRevenue).toBe(0);
+    expect(game.services.nextClientId).toBe(1);
+  });
+
+  it("сохраняет корректных клиентов и поднимает счётчик id", () => {
+    const source = createGame();
+    const game = migrateGame({
+      ...source,
+      services: {
+        ...source.services,
+        clients: [
+          { id: 5, serviceId: "landing", buildId: 1, sinceHour: 10, pricePerMonth: 4 },
+          { id: 2, serviceId: "cms", buildId: 1, sinceHour: 11, pricePerMonth: 12 },
+        ],
+        nextClientId: 3,
+      },
+    });
+    expect(game.services.clients).toHaveLength(2);
+    expect(game.services.nextClientId).toBe(6);
+    expect(game.services.clients[0]!.pricePerMonth).toBe(4);
+  });
+
+  it("принимает новые события услуг", () => {
+    const game = migrateGame({
+      ...legacy,
+      version: 5,
+      events: [
+        { id: 1, kind: "clientsJoined", hour: 24, amount: 2, ref: "landing" },
+        { id: 2, kind: "clientsLeft", hour: 48, amount: 1 },
+      ],
+    });
+    expect(game.events.map((event) => event.kind)).toEqual(["clientsJoined", "clientsLeft"]);
+    expect(game.events[0]!.amount).toBe(2);
+    expect(game.events[0]!.ref).toBe("landing");
   });
 });
