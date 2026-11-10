@@ -15,6 +15,7 @@ import {
   createGame,
   getGameDate,
   placeNewOrder as applyNewOrder,
+  resolveTickets as applyResolveTickets,
   previewNewOrder,
   resetBreaker as applyResetBreaker,
   restartServers as applyRestartServers,
@@ -138,6 +139,7 @@ interface GameStore {
   setServicePrice: (serviceId: ServiceId, priceMult: number) => void;
   toggleService: (serviceId: ServiceId) => void;
   setServiceLimit: (serviceId: ServiceId, limit: number) => void;
+  resolveTickets: () => void;
 
   requestConfirm: (request: ConfirmRequest) => void;
   resolveConfirm: (accepted: boolean) => void;
@@ -621,6 +623,16 @@ export const useGameStore = create<GameStore>((set, get) => {
       notify("toast.serviceLimit");
     },
 
+    resolveTickets: () => {
+      const result = applyResolveTickets(get().game);
+      if (!result.ok) {
+        notify("toast.nothingToResolve", undefined, "warn");
+        return;
+      }
+      set({ game: result.state, dirty: true });
+      notify("toast.ticketsResolved", { count: result.resolved });
+    },
+
     requestConfirm: (request) => set({ confirm: request }),
     resolveConfirm: (accepted) => {
       const request = get().confirm;
@@ -815,6 +827,21 @@ export const useGameStore = create<GameStore>((set, get) => {
       const left = result.events.find((event) => event.kind === "clientsLeft");
       if (left) {
         notify("toast.clientsLeft", { count: Math.round(left.amount ?? 0) }, "warn");
+      }
+
+      const reputationChanged = result.events.find(
+        (event) => event.kind === "reputationChanged",
+      );
+      if (reputationChanged) {
+        const value = Math.round((reputationChanged.amount ?? 0) * 100) / 100;
+        const key =
+          value > game.reputation.value ? "toast.reputationUp" : "toast.reputationDown";
+        notify(key, { value: value.toFixed(2) }, value > game.reputation.value ? "info" : "warn");
+      }
+
+      const review = result.events.find((event) => event.kind === "reviewPosted");
+      if (review) {
+        notify("toast.reviewPosted", { value: (review.amount ?? 0).toFixed(1) });
       }
 
       if (result.state.gameOver && !game.gameOver) {

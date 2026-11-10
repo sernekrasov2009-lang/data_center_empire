@@ -5,6 +5,7 @@ export * from "./components";
 export * from "./location";
 export * from "./hardware";
 export * from "./services";
+export * from "./reputation";
 export * from "./bot";
 export { createRng, nextUint32, nextFloat, nextInt, chance, pick } from "./core/rng";
 export {

@@ -40,11 +40,6 @@ function roundMbit(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-/** Репутация компании. Пока константа из services.json; станет динамической на этапе 7. */
-export function reputation(): number {
-  return servicesData.demand.reputationStart;
-}
-
 function clampPriceMult(mult: number): number {
   return Math.min(
     servicesData.demand.priceMaxMult,
@@ -65,6 +60,7 @@ export function createServices(): ServicesState {
     monthRevenue: 0,
     lastHourRevenue: 0,
     nextClientId: 1,
+    slaPenalty: {},
   };
 
 }
@@ -76,6 +72,7 @@ export function cloneServices(services: ServicesState): ServicesState {
     monthRevenue: services.monthRevenue,
     lastHourRevenue: services.lastHourRevenue,
     nextClientId: services.nextClientId,
+    slaPenalty: { ...services.slaPenalty },
   };
 }
 
@@ -85,10 +82,10 @@ export function dailyDemand(state: GameState, serviceId: ServiceId): number {
   const entry = state.services.services.find((service) => service.id === serviceId);
   if (!entry || !entry.enabled) return 0;
 
-  const { priceElasticity, reputationStart } = servicesData.demand;
+  const { priceElasticity } = servicesData.demand;
   const ratio = entry.priceMult; // P / P_рынок
   const priceFactor = Math.pow(ratio, -priceElasticity);
-  const reputationFactor = Math.pow(reputationStart, 1.5);
+  const reputationFactor = Math.pow(Math.max(0.01, state.reputation.value), 1.5);
   return definition.baseDemandPerDay * reputationFactor * priceFactor;
 }
 
@@ -96,7 +93,7 @@ export function dailyDemand(state: GameState, serviceId: ServiceId): number {
  * Пуассоновская выборка через seeded RNG (Knuth). Для малых λ точна,
  * больших в этой игре не бывает: даже λ=50 даёт верное распределение.
  */
-function samplePoisson(rng: GameState["rng"], lambda: number): number {
+export function samplePoisson(rng: GameState["rng"], lambda: number): number {
   if (lambda <= 0) return 0;
   const limit = Math.exp(-lambda);
   let k = 0;
@@ -188,11 +185,12 @@ export function tickServices(state: GameState): { state: GameState; events: Serv
   for (const client of services.clients) {
     const entry = services.services.find((service) => service.id === client.serviceId);
     const pricePenaltyFrom = servicesData.churn.pricePenaltyFrom;
+    const slaExtra = (services.slaPenalty[client.serviceId] ?? 0) / DAYS_PER_MONTH;
     const extra =
       entry && entry.priceMult > pricePenaltyFrom
         ? servicesData.churn.pricePenaltyMonthly / DAYS_PER_MONTH
         : 0;
-    if (nextFloat(state.rng) < dailyChurnBase + extra) {
+    if (nextFloat(state.rng) < dailyChurnBase + extra + slaExtra) {
       leavers.push(client.id);
     } else {
       survivors.push(client);

@@ -17,8 +17,10 @@ import {
   createEconomy,
   createHardware,
   createLocation,
+  createReputation,
   createRng,
   createServices,
+  cloneReputation,
   refreshUsedMarket,
   type ServiceState,
   type ServicesState,
@@ -34,6 +36,7 @@ import type {
   LocationState,
   MonthlyReport,
   PartInstance,
+  ReputationState,
   SimEvent,
   UsedLot,
 } from "../sim";
@@ -467,6 +470,53 @@ function asServices(value: unknown, hardware: HardwareState): ServicesState {
     monthRevenue: Math.max(0, asNumber(value.monthRevenue, 0)),
     lastHourRevenue: Math.max(0, asNumber(value.lastHourRevenue, 0)),
     nextClientId: Math.max(1, maxClientId + 1, Math.floor(asNumber(value.nextClientId, 1))),
+    slaPenalty: {},
+  };
+}
+
+/** Читает блок репутации; повреждённый заменяется стартовым состоянием. */
+function asReputation(value: unknown): ReputationState {
+  const fallback = createReputation();
+  if (!isRecord(value)) return fallback;
+
+  const clamped = Math.min(
+    Math.max(asNumber(value.value, fallback.value), 0.05),
+    3,
+  );
+  const openTickets = Array.isArray(value.openTickets)
+    ? value.openTickets
+        .map((item) => {
+          if (!isRecord(item)) return null;
+          const id = Math.floor(asNumber(item.id, 0));
+          if (id < 1) return null;
+          return {
+            id,
+            openedHour: Math.max(0, Math.floor(asNumber(item.openedHour, 0))),
+            clientId:
+              typeof item.clientId === "number" && Number.isInteger(item.clientId) && item.clientId > 0
+                ? item.clientId
+                : null,
+          };
+        })
+        .filter((ticket): ticket is ReputationState["openTickets"][number] => ticket !== null)
+        .slice(0, 500)
+    : [];
+
+  return {
+    ...cloneReputation(fallback),
+    value: clamped,
+    downtimeHours: Math.max(0, asNumber(value.downtimeHours, 0)),
+    poorQualityHours: Math.max(0, asNumber(value.poorQualityHours, 0)),
+    hoursWithClients: Math.max(0, asNumber(value.hoursWithClients, 0)),
+    goodHours: Math.max(0, asNumber(value.goodHours, 0)),
+    openTickets,
+    nextTicketId: Math.max(
+      1,
+      openTickets.reduce((max, ticket) => Math.max(max, ticket.id), 0) + 1,
+      Math.floor(asNumber(value.nextTicketId, 1)),
+    ),
+    lastUptime: [],
+    lastReviewRating: null,
   };
 }
 
@@ -570,6 +620,7 @@ export function migrateGame(raw: unknown): GameState {
     location: asLocation(raw.location),
     // блок services зависит от сборок, поэтому после hardware
     services: asServices(raw.services, asHardware(raw.hardware)),
+    reputation: asReputation(raw.reputation),
     gameOver: asGameOver(raw.gameOver),
     stats: { ticks: Math.max(0, Math.floor(isRecord(raw.stats) ? asNumber(raw.stats.ticks, 0) : 0)) },
     events: asEvents(raw.events),
@@ -585,6 +636,7 @@ export function migrateGame(raw: unknown): GameState {
   // Миграция 3 → 4: появилось железо. Пустой б/у рынок наполняем сразу.
   // Миграция 4 → 5: появилась локация; готовые серверы получают слоты.
   // Миграция 5 → 6: появились услуги и клиенты; пустой блок создаётся с дефолтами.
+  // Миграция 6 → 7: появилась репутация/аптайм/тикеты; санитизируется как блок выше.
   const withSlots = reconcileSlots(game);
   return refreshUsedMarket(withSlots).state;
 }

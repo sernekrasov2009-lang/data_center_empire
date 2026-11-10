@@ -51,7 +51,7 @@ export function cloneLocation(location: LocationState): LocationState {
   return { ...location, ownedCooling: location.ownedCooling.slice() };
 }
 
-function cloneState(state: GameState): GameState {
+export function cloneState(state: GameState): GameState {
   return {
     ...state,
     rng: { ...state.rng },

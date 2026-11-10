@@ -44,6 +44,7 @@ const milestones = [
   { name: "firstClient", label: "Первый клиент", day: null },
   { name: "revenue1000", label: "$1000 выручки за месяц", day: null },
   { name: "secondServer", label: "Второй сервер", day: null },
+  { name: "uptime999", label: "99,9% аптайма за месяц", day: null },
 ];
 let stagnationStart = null;
 const stagnations = [];
@@ -68,6 +69,14 @@ for (let day = 1; day <= days; day += 1) {
   const report = state.economy.reports.at(-1);
   if (milestones[1].day === null && report && report.revenue >= 1000) milestones[1].day = day;
   if (milestones[2].day === null && state.hardware.builds.length >= 2) milestones[2].day = day;
+  const lastUptime = state.reputation.lastUptime;
+  if (
+    milestones[3].day === null &&
+    lastUptime.length > 0 &&
+    lastUptime.every((entry) => entry.uptime >= 0.999)
+  ) {
+    milestones[3].day = day;
+  }
 
   // Застой: 30 дней без решений бота (нет окупаемых покупок).
   const decidedToday = bot.decisions.some(
@@ -110,6 +119,12 @@ console.log(`  деньги: $${last.money.toFixed(2)}`);
 console.log(`  клиенты: ${last.clients}`);
 console.log(`  серверы: ${last.servers}`);
 console.log(`  банкротство: ${state.gameOver ? "да" : "нет"}`);
+console.log(`  репутация: ${state.reputation.value.toFixed(2)}`);
+console.log(
+  `  тикетов открыто: ${state.reputation.openTickets.length}, последний отзыв: ${
+    state.reputation.lastReviewRating === null ? "—" : `${state.reputation.lastReviewRating} / 5`
+  }`,
+);
 console.log("");
 console.log("Застои (30+ дней без окупаемых покупок):");
 const longStagnations = stagnations.filter((period) => period.to - period.from >= 30);
@@ -131,10 +146,10 @@ for (const line of decisionsLog.slice(-15)) {
 
 if (csvPath) {
   const fs = await import("node:fs");
-  const lines = ["day,money,revenue,expenses,clients,servers"];
+  const lines = ["day,money,revenue,expenses,clients,servers,reputation,uptimePct"];
   for (const row of rows) {
     lines.push(
-      [row.day, row.money, row.revenue, row.expenses, row.clients, row.servers].join(","),
+      [row.day, row.money, row.revenue, row.expenses, row.clients, row.servers, row.reputation, row.uptimePct].join(","),
     );
   }
   fs.writeFileSync(csvPath, lines.join("\n") + "\n", "utf8");

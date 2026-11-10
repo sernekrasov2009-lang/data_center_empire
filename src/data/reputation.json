@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "ema": {
+    "weights": { "uptime": 0.5, "quality": 0.3, "support": 0.2 },
+    "windowDays": 60,
+    "min": 0.2,
+    "max": 1.5,
+    "start": 0.7
+  },
+  "quality": {
+    "throttleTempC": 45
+  },
+  "tickets": {
+    "perClientPerMonth": 0.05,
+    "perIncidentPerClient": 0.5,
+    "scorePenaltyPer10Open": 0.02,
+    "maxOpen": 100
+  },
+  "sla": {
+    "churnPerDailyPoint": 0.01,
+    "uptimeReportDays": 30
+  },
+  "reviews": {
+    "ratingFrom": 1,
+    "ratingTo": 5
+  }
+}

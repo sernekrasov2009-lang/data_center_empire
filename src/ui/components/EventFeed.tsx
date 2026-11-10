@@ -80,6 +80,16 @@ export function EventFeed(): React.JSX.Element {
                       amount: formatMoney(-(event.amount ?? 0), language, numberFormat),
                     })}
                   {event.kind === "neighborsShutdown" && t("feed.neighborsShutdown")}
+                  {event.kind === "ticketsOpened" &&
+                    t("feed.ticketsOpened", { amount: event.amount ?? 0 })}
+                  {event.kind === "ticketsResolved" &&
+                    t("feed.ticketsResolved", { amount: event.amount ?? 0 })}
+                  {event.kind === "reputationChanged" &&
+                    t("feed.reputationChanged", { value: (event.amount ?? 0).toFixed(2) })}
+                  {event.kind === "reviewPosted" &&
+                    t("feed.reviewPosted", { value: (event.amount ?? 0).toFixed(1) })}
+                  {event.kind === "slaMissed" &&
+                    t("feed.slaMissed", { ref: event.ref ?? "—", amount: event.amount ?? 0 })}
                 </span>
               </li>
             );

@@ -70,16 +70,18 @@ describe("игровой цикл", () => {
 
   it("закрывает месяц на 30-е сутки и начинает новый день", () => {
     const result = advanceTicks(createGame(), 720);
-    const kinds = result.state.events.map((event) => event.kind);
+    const kinds = result.events.map((event) => event.kind);
 
     expect(kinds.filter((kind) => kind === "dayStarted")).toHaveLength(30);
     expect(kinds.filter((kind) => kind === "monthClosed")).toHaveLength(1);
 
-    const last = result.state.events[result.state.events.length - 1];
-    const closeIndex = result.state.events.findIndex((event) => event.kind === "monthClosed");
-    const close = result.state.events[closeIndex];
-    const bill = result.state.events[closeIndex + 1];
-    expect(last).toMatchObject({ kind: "dayStarted", hour: 720 });
+    const last = result.events[result.events.length - 1];
+    const closeIndex = result.events.findIndex((event) => event.kind === "monthClosed");
+    const close = result.events[closeIndex];
+    const bill = result.events[closeIndex + 1];
+    // Последний — суточный тик репутации (этап 7), dayStarted перед ним.
+    expect(last).toMatchObject({ hour: 720 });
+    expect(result.events.at(-2)).toMatchObject({ kind: "dayStarted", hour: 720 });
     expect(close).toMatchObject({ kind: "monthClosed", hour: 720 });
     expect(bill).toMatchObject({ kind: "billPaid", hour: 720 });
   });

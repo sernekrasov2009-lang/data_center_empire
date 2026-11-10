@@ -5,6 +5,7 @@ import {
 import { buildStats, validateBuild } from "./components";
 import { placeNewOrder, previewNewOrder, startBuild } from "./hardware";
 import { activeBuilds, firstFreeSlot, getLocation, totalPowerDrawW } from "./location";
+import { resolveTickets } from "./reputation";
 import {
   toggleService,
 } from "./services";
@@ -116,6 +117,13 @@ export function botDay(state: GameState): BotDayResult {
         decisions.push({ kind: "enableService", detail: definition.id });
       }
     }
+  }
+
+  // 1.5 Поддержка: бот закрывает тикеты каждый день (DESIGN §15.6, вручную).
+  const tickets = resolveTickets(next);
+  if (tickets.ok) {
+    next = tickets.state;
+    decisions.push({ kind: "enableService", detail: `закрыто тикетов: ${tickets.resolved}` });
   }
 
   // 2. Сборка из уже купленных деталей, если набор валиден.
@@ -264,10 +272,16 @@ export interface DaySummary {
   expenses: number;
   clients: number;
   servers: number;
+  reputation: number;
+  uptimePct: number;
 }
 
 export function summarizeDay(state: GameState, day: number): DaySummary {
   const report = state.economy.reports.at(-1);
+  const uptimePct =
+    state.reputation.hoursWithClients > 0
+      ? Math.max(0, (1 - state.reputation.downtimeHours / state.reputation.hoursWithClients) * 100)
+      : 100;
   return {
     day,
     money: Math.round(state.money * 100) / 100,
@@ -275,5 +289,7 @@ export function summarizeDay(state: GameState, day: number): DaySummary {
     expenses: report ? Math.round(report.totalExpenses * 100) / 100 : 0,
     clients: state.services.clients.length,
     servers: activeBuilds(state).length,
+    reputation: Math.round(state.reputation.value * 100) / 100,
+    uptimePct: Math.round(uptimePct * 10) / 10,
   };
 }

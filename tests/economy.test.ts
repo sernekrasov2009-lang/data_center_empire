@@ -117,7 +117,7 @@ describe("электричество и счета", () => {
 describe("события экономики и банкротство", () => {
   it("присылает счёт и предупреждение о минусе один раз", () => {
     const result = advanceTicks(createGame({ money: 0 }), HOURS_PER_MONTH * 2);
-    const kinds = result.state.events.map((event) => event.kind);
+    const kinds = result.events.map((event) => event.kind);
     expect(kinds.filter((kind) => kind === "billPaid")).toHaveLength(2);
     expect(kinds.filter((kind) => kind === "moneyLow")).toHaveLength(1);
     expect(result.state.economy.lowMoneyWarned).toBe(true);
@@ -125,7 +125,7 @@ describe("события экономики и банкротство", () => {
 
   it("меняет тариф раз в год в пределах ±20%", () => {
     const result = advanceTicks(createGame({ seed: 5 }), HOURS_PER_YEAR);
-    const priceEvents = result.state.events.filter((event) => event.kind === "electricityPriceChanged");
+    const priceEvents = result.events.filter((event) => event.kind === "electricityPriceChanged");
     expect(priceEvents).toHaveLength(1);
     expect(priceEvents[0]!.hour).toBe(HOURS_PER_YEAR);
     expect(result.state.economy.electricityPriceMult).toBeGreaterThanOrEqual(

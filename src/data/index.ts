@@ -3,6 +3,7 @@ import rawComponents from "./components.json";
 import rawDifficulties from "./difficulties.json";
 import rawEconomy from "./economy.json";
 import rawLocation from "./location.json";
+import rawReputation from "./reputation.json";
 import rawServices from "./services.json";
 
 /** Скорости игры. 0 — пауза (DESIGN.md, разд. 1). */
@@ -540,6 +541,88 @@ export interface ServicesFile {
 }
 
 export const servicesData = rawServices as ServicesFile;
+
+/* ── Репутация и аптайм (этап 7, DESIGN.md §6 и §15.6) ─────────────── */
+
+export interface ReputationEma {
+  weights: { uptime: number; quality: number; support: number };
+  windowDays: number;
+  min: number;
+  max: number;
+  start: number;
+}
+
+export interface ReputationFile {
+  version: number;
+  ema: ReputationEma;
+  quality: {
+    throttleTempC: number;
+  };
+  tickets: {
+    perClientPerMonth: number;
+    perIncidentPerClient: number;
+    scorePenaltyPer10Open: number;
+    maxOpen: number;
+  };
+  sla: {
+    churnPerDailyPoint: number;
+    uptimeReportDays: number;
+  };
+  reviews: {
+    ratingFrom: number;
+    ratingTo: number;
+  };
+}
+
+export const reputationData = rawReputation as ReputationFile;
+
+/** Проверка reputation.json: веса, окно EMA, ставки тикетов и SLA. */
+export function validateReputation(data: ReputationFile): string[] {
+  const errors: string[] = [];
+
+  if (!Number.isInteger(data.version) || data.version < 1) {
+    errors.push("version: ожидается целое число ≥ 1");
+  }
+
+  const { ema } = data;
+  const weightSum = ema.weights.uptime + ema.weights.quality + ema.weights.support;
+  if (Math.abs(weightSum - 1) > 0.001) {
+    errors.push(`ema.weights: сумма должна быть 1, получено ${weightSum.toFixed(3)}`);
+  }
+  if (!(ema.windowDays >= 7 && ema.windowDays <= 365)) {
+    errors.push("ema.windowDays: ожидается 7…365");
+  }
+  if (!(ema.min >= 0 && ema.max <= 3 && ema.min < ema.max)) {
+    errors.push("ema.min/max: ожидается 0 ≤ min < max ≤ 3");
+  }
+  if (!(ema.start >= ema.min && ema.start <= ema.max)) {
+    errors.push("ema.start: должен быть в границах min…max");
+  }
+
+  const { tickets } = data;
+  if (!(tickets.perClientPerMonth > 0) || tickets.perClientPerMonth > 1) {
+    errors.push("tickets.perClientPerMonth: ожидается 0…1");
+  }
+  if (!(tickets.perIncidentPerClient >= 0) || tickets.perIncidentPerClient > 5) {
+    errors.push("tickets.perIncidentPerClient: ожидается 0…5");
+  }
+  if (!(tickets.scorePenaltyPer10Open > 0) || tickets.scorePenaltyPer10Open > 0.2) {
+    errors.push("tickets.scorePenaltyPer10Open: ожидается 0…0.2");
+  }
+  if (!Number.isInteger(tickets.maxOpen) || tickets.maxOpen < 10 || tickets.maxOpen > 1000) {
+    errors.push("tickets.maxOpen: ожидается 10…1000");
+  }
+
+  const { sla } = data;
+  if (!(sla.churnPerDailyPoint > 0) || sla.churnPerDailyPoint > 0.1) {
+    errors.push("sla.churnPerDailyPoint: ожидается 0…0.1");
+  }
+  if (!Number.isInteger(sla.uptimeReportDays) || sla.uptimeReportDays !== 30) {
+    errors.push("sla.uptimeReportDays: по дизайну равен длине месяца (30)");
+  }
+
+  return errors;
+}
 
 export function getService(id: ServiceId): ServiceDefinition {
   const service = servicesData.services.find((candidate) => candidate.id === id);

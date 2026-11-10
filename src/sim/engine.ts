@@ -4,11 +4,18 @@ import { HOURS_PER_DAY, HOURS_PER_MONTH, HOURS_PER_YEAR } from "./core/time";
 import { accrueHour, billMonth, createEconomy, driftElectricityPrice } from "./economy";
 import { createHardware, driftMarketPrice, refreshUsedMarket, tickHardware } from "./hardware";
 import { cloneLocation, createLocation, tickLocation } from "./location";
+import {
+  closeMonthReputation,
+  cloneReputation,
+  createReputation,
+  tickReputationDay,
+  tickReputationHour,
+} from "./reputation";
 import { cloneServices, createServices, tickServices } from "./services";
 import type { GameState, SimEvent, Speed } from "./types";
 
 /** Версия структуры GameState. Меняется при миграциях сохранений. */
-export const GAME_STATE_VERSION = 6;
+export const GAME_STATE_VERSION = 7;
 
 export const DEFAULT_COMPANY_NAME = "Uptime Hosting";
 
@@ -43,6 +50,7 @@ export function createGame(options: NewGameOptions = {}): GameState {
     hardware: createHardware(),
     location: createLocation(),
     services: createServices(),
+    reputation: createReputation(),
     gameOver: null,
     stats: { ticks: 0 },
     events: [],
@@ -99,6 +107,7 @@ export function advanceTicks(state: GameState, ticks: number): AdvanceResult {
     },
     location: cloneLocation(state.location),
     services: cloneServices(state.services),
+    reputation: cloneReputation(state.reputation),
     events: state.events.slice(),
   };
 
@@ -127,9 +136,17 @@ export function advanceTicks(state: GameState, ticks: number): AdvanceResult {
     const hour = next.time.hour;
     const monthClosed = hour % HOURS_PER_MONTH === 0;
 
+    // Репутация копит часы простоя/качества каждый час (этап 7).
+    tickReputationHour(next);
+
     if (monthClosed) {
       const bill = billMonth(next, hour);
       next = bill.state;
+      const reputationMonth = closeMonthReputation(next);
+      for (const event of reputationMonth.events) {
+        pushEvent(next, events, event.kind, hour, event.amount, event.ref);
+      }
+      next.services.slaPenalty = reputationMonth.slaPenalty;
       pushEvent(next, events, "monthClosed", hour);
       pushEvent(next, events, "billPaid", hour, roundMoney(bill.report.totalExpenses));
 
@@ -163,6 +180,16 @@ export function advanceTicks(state: GameState, ticks: number): AdvanceResult {
         pushEvent(next, events, event.kind, next.time.hour, event.amount, event.ref);
       }
       pushEvent(next, events, "dayStarted", hour);
+
+      // Инциденты за сутки: отказы деталей за прошедший день.
+      const incidents = events.filter(
+        (event) =>
+          event.kind === "partFailed" && event.hour > hour - HOURS_PER_DAY && event.hour <= hour,
+      ).length;
+      const reputationDay = tickReputationDay(next, incidents);
+      for (const event of reputationDay) {
+        pushEvent(next, events, event.kind, next.time.hour, event.amount, event.ref);
+      }
     }
 
     if (next.gameOver) break;

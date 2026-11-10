@@ -14,12 +14,24 @@ export function ServicesScreen(): React.JSX.Element {
   const setServicePrice = useGameStore((state) => state.setServicePrice);
   const toggleService = useGameStore((state) => state.toggleService);
   const setServiceLimit = useGameStore((state) => state.setServiceLimit);
+  const resolveTickets = useGameStore((state) => state.resolveTickets);
 
   const counts = clientsByService(game);
   const usage = buildUsage(game);
   const running = activeBuilds(game).length > 0;
   const internet = usedMbit(game);
   const perHour = game.services.lastHourRevenue;
+  const reputation = game.reputation;
+  const uptimePct =
+    reputation.hoursWithClients > 0
+      ? Math.max(0, (1 - reputation.downtimeHours / reputation.hoursWithClients) * 100)
+      : null;
+  const lastUptimePct =
+    reputation.lastUptime.length > 0
+      ? (reputation.lastUptime.reduce((sum, entry) => sum + entry.uptime, 0) /
+          reputation.lastUptime.length) *
+        100
+      : null;
 
   return (
     <div className="services">
@@ -180,6 +192,74 @@ export function ServicesScreen(): React.JSX.Element {
             </div>
           </div>
           <p className="panel__hint">{t("services.usageHint")}</p>
+        </section>
+
+        <section className="panel panel--wide">
+          <div className="panel__label">{t("reputation.title")}</div>
+          <p className="hardware__subtitle">{t("reputation.subtitle")}</p>
+          <div className="econ-rows">
+            <div className="econ-row">
+              <span className="econ-row__label">{t("reputation.value")}</span>
+              <span
+                className="econ-row__value"
+                data-state={reputation.value >= 0.7 ? "ok" : "warn"}
+              >
+                {reputation.value.toFixed(2)}
+              </span>
+            </div>
+            <div className="econ-row">
+              <span className="econ-row__label">{t("reputation.uptime")}</span>
+              <span className="econ-row__value">
+                {uptimePct === null
+                  ? t("reputation.noData")
+                  : t("reputation.uptimeValue", { value: uptimePct.toFixed(1) })}
+              </span>
+            </div>
+            <div className="econ-row">
+              <span className="econ-row__label">{t("reputation.lastUptime")}</span>
+              <span className="econ-row__value">
+                {lastUptimePct === null
+                  ? t("reputation.noData")
+                  : t("reputation.uptimeValue", { value: lastUptimePct.toFixed(1) })}
+              </span>
+            </div>
+            <div className="econ-row">
+              <span className="econ-row__label">{t("reputation.downtime")}</span>
+              <span
+                className="econ-row__value"
+                data-state={reputation.downtimeHours > 0 ? "warn" : "ok"}
+              >
+                {reputation.downtimeHours}
+              </span>
+            </div>
+            <div className="econ-row">
+              <span className="econ-row__label">{t("reputation.review")}</span>
+              <span className="econ-row__value">
+                {reputation.lastReviewRating === null
+                  ? t("reputation.noData")
+                  : t("reputation.reviewValue", { value: reputation.lastReviewRating.toFixed(1) })}
+              </span>
+            </div>
+            <div className="econ-row">
+              <span className="econ-row__label">{t("reputation.tickets")}</span>
+              <span
+                className="econ-row__value"
+                data-state={reputation.openTickets.length > 0 ? "warn" : "ok"}
+              >
+                {t("reputation.ticketsOpen", { count: reputation.openTickets.length })}
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn--small"
+            disabled={reputation.openTickets.length === 0}
+            onClick={resolveTickets}
+          >
+            {t("reputation.resolveTickets")}
+          </button>
+          <p className="panel__hint">{t("reputation.hint")}</p>
+          <p className="panel__hint">{t("reputation.slaHint")}</p>
         </section>
       </div>
     </div>

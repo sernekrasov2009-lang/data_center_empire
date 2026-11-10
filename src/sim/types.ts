@@ -36,7 +36,12 @@ export type SimEventKind =
   | "noiseFine"
   | "neighborsShutdown"
   | "clientsJoined"
-  | "clientsLeft";
+  | "clientsLeft"
+  | "ticketsOpened"
+  | "ticketsResolved"
+  | "reputationChanged"
+  | "reviewPosted"
+  | "slaMissed";
 
 export interface SimEvent {
   id: number;
@@ -246,6 +251,46 @@ export interface ServicesState {
   /** Выручка, начисленная за последний полный час, $ (для панели). */
   lastHourRevenue: number;
   nextClientId: number;
+  /** Дополнительный месячный отток из-за нарушений SLA, по услугам (этап 7). */
+  slaPenalty: Partial<Record<ServiceId, number>>;
+}
+
+/* ── Репутация, аптайм и тикеты (этап 7) ──────────────────────────── */
+
+/** Открытый тикет поддержки. */
+export interface SupportTicket {
+  id: number;
+  /** Игровой час поступления. */
+  openedHour: number;
+  /** id клиента, от которого тикет; null — анонимный (от отказов). */
+  clientId: number | null;
+}
+
+/** Аптайм за закрытый месяц по одной услуге. */
+export interface ServiceUptime {
+  serviceId: ServiceId;
+  /** Доля часов месяца, когда услуга была доступна клиентам, 0…1. */
+  uptime: number;
+}
+
+export interface ReputationState {
+  /** Текущая репутация R, 0,2…1,5 (DESIGN.md, разд. 6). */
+  value: number;
+  /** Часы месяца, когда хоть один сервер с клиентами был недоступен. */
+  downtimeHours: number;
+  /** Часы месяца с плохим качеством: перегрев или выбитый автомат. */
+  poorQualityHours: number;
+  /** Часы месяца, когда вообще были клиенты (знаменатель аптайма). */
+  hoursWithClients: number;
+  /** Часы месяца, когда сервисы работали и без перегрева. */
+  goodHours: number;
+  /** Открытые тикеты поддержки. */
+  openTickets: SupportTicket[];
+  nextTicketId: number;
+  /** Аптайм последнего закрытого месяца, по услугам. */
+  lastUptime: ServiceUptime[];
+  /** Рейтинг последнего отзыва, 1–5; null — ещё не было. */
+  lastReviewRating: number | null;
 }
 
 export interface GameState {
@@ -260,6 +305,7 @@ export interface GameState {
   hardware: HardwareState;
   location: LocationState;
   services: ServicesState;
+  reputation: ReputationState;
   /** Заполняется, когда игра закончена (банкротство). */
   gameOver: GameOverInfo | null;
   stats: GameStats;
