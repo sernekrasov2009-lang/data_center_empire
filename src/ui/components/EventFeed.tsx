@@ -90,6 +90,21 @@ export function EventFeed(): React.JSX.Element {
                     t("feed.reviewPosted", { value: (event.amount ?? 0).toFixed(1) })}
                   {event.kind === "slaMissed" &&
                     t("feed.slaMissed", { ref: event.ref ?? "—", amount: event.amount ?? 0 })}
+                  {event.kind === "blackoutStarted" &&
+                    t("feed.blackoutStarted", { amount: Math.round(event.amount ?? 0) })}
+                  {event.kind === "blackoutEnded" && t("feed.blackoutEnded")}
+                  {event.kind === "voltageSpike" &&
+                    t("feed.voltageSpike", { ref: event.ref ?? "—" })}
+                  {event.kind === "ddosStarted" &&
+                    t("feed.ddosStarted", { amount: Math.round(event.amount ?? 0) })}
+                  {event.kind === "ddosEnded" && t("feed.ddosEnded")}
+                  {event.kind === "channelFailureStarted" &&
+                    t("feed.channelFailureStarted", { amount: Math.round(event.amount ?? 0) })}
+                  {event.kind === "channelFailureEnded" && t("feed.channelFailureEnded")}
+                  {event.kind === "clientHacked" &&
+                    t("feed.clientHacked", { amount: (event.amount ?? 0).toFixed(2) })}
+                  {event.kind === "electricityPriceSpiked" &&
+                    t("feed.electricityPriceSpiked", { amount: Math.round(event.amount ?? 0) })}
                 </span>
               </li>
             );

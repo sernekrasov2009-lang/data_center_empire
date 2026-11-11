@@ -21,6 +21,7 @@ import {
   createRng,
   createServices,
   cloneReputation,
+  createWorldEvents,
   refreshUsedMarket,
   type ServiceState,
   type ServicesState,
@@ -621,6 +622,7 @@ export function migrateGame(raw: unknown): GameState {
     // блок services зависит от сборок, поэтому после hardware
     services: asServices(raw.services, asHardware(raw.hardware)),
     reputation: asReputation(raw.reputation),
+    world: createWorldEvents(),
     gameOver: asGameOver(raw.gameOver),
     stats: { ticks: Math.max(0, Math.floor(isRecord(raw.stats) ? asNumber(raw.stats.ticks, 0) : 0)) },
     events: asEvents(raw.events),
@@ -637,6 +639,7 @@ export function migrateGame(raw: unknown): GameState {
   // Миграция 4 → 5: появилась локация; готовые серверы получают слоты.
   // Миграция 5 → 6: появились услуги и клиенты; пустой блок создаётся с дефолтами.
   // Миграция 6 → 7: появилась репутация/аптайм/тикеты; санитизируется как блок выше.
+  // Миграция 7 → 8: появились мировые события; активных при загрузке нет.
   const withSlots = reconcileSlots(game);
   return refreshUsedMarket(withSlots).state;
 }

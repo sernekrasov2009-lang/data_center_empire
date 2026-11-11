@@ -31,7 +31,8 @@ export function hourlyElectricityCost(
   state: GameState,
   priceMult = state.economy.electricityPriceMult,
 ): number {
-  return (totalPowerDrawW(state) / 1000) * electricityPricePerKwh(priceMult);
+  const eventMult = state.world.electricityPriceEventMult;
+  return (totalPowerDrawW(state) / 1000) * electricityPricePerKwh(priceMult) * eventMult;
 }
 
 /** Полный месяц электричества при текущей цене (для прогноза и подсказок). */

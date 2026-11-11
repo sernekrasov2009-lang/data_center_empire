@@ -5,6 +5,7 @@ import rawEconomy from "./economy.json";
 import rawLocation from "./location.json";
 import rawReputation from "./reputation.json";
 import rawServices from "./services.json";
+import rawEvents from "./events.json";
 
 /** Скорости игры. 0 — пауза (DESIGN.md, разд. 1). */
 export type Speed = 0 | 1 | 5 | 20 | 60;
@@ -307,7 +308,13 @@ export function validateEconomy(data: EconomyFile): string[] {
 
 /* ── Локация, охлаждение, шум и соседи (DESIGN.md, разд. 4) ───────── */
 
-export type PowerOffReason = "none" | "breaker" | "overheat" | "neighbors";
+export type PowerOffReason =
+  | "none"
+  | "breaker"
+  | "overheat"
+  | "neighbors"
+  | "blackout"
+  | "channelFailure";
 
 export interface CoolingOption {
   id: string;
@@ -575,6 +582,100 @@ export interface ReputationFile {
 }
 
 export const reputationData = rawReputation as ReputationFile;
+
+/* ── Случайные события и аварии (этап 8, DESIGN.md §7 и §15.7) ─────── */
+
+export interface EventsFile {
+  version: number;
+  blackout: {
+    chancePerDay: number;
+    summerChancePerDay: number;
+    minHours: number;
+    maxHours: number;
+  };
+  voltageSpike: {
+    chancePerDay: number;
+  };
+  ddos: {
+    chancePerDay: number;
+    reputationGrowthPerPoint: number;
+    reputationFrom: number;
+    minHours: number;
+    maxHours: number;
+  };
+  channelFailure: {
+    chancePerDay: number;
+    minHours: number;
+    maxHours: number;
+  };
+  clientHacked: {
+    chancePerDay: number;
+    reputationHit: number;
+  };
+  electricityPriceSpike: {
+    chancePerDay: number;
+    priceMult: number;
+    minMonths: number;
+    maxMonths: number;
+  };
+}
+
+export const eventsData = rawEvents as EventsFile;
+
+/** Проверка events.json: вероятности в 0…1, длительности положительные. */
+export function validateEvents(data: EventsFile): string[] {
+  const errors: string[] = [];
+
+  if (!Number.isInteger(data.version) || data.version < 1) {
+    errors.push("version: ожидается целое число ≥ 1");
+  }
+
+  const checks: [string, number, number, number][] = [
+    ["blackout.chancePerDay", data.blackout.chancePerDay, 0, 0.05],
+    ["blackout.summerChancePerDay", data.blackout.summerChancePerDay, 0, 0.05],
+    ["voltageSpike.chancePerDay", data.voltageSpike.chancePerDay, 0, 0.05],
+    ["ddos.chancePerDay", data.ddos.chancePerDay, 0, 0.05],
+    ["channelFailure.chancePerDay", data.channelFailure.chancePerDay, 0, 0.05],
+    ["clientHacked.chancePerDay", data.clientHacked.chancePerDay, 0, 0.05],
+    ["electricityPriceSpike.chancePerDay", data.electricityPriceSpike.chancePerDay, 0, 0.05],
+  ];
+  for (const [key, value, min, max] of checks) {
+    if (!(value >= min && value <= max)) {
+      errors.push(`${key}: ожидается ${min}…${max}`);
+    }
+  }
+
+  const durationChecks: [string, number, number][] = [
+    ["blackout", data.blackout.maxHours, data.blackout.minHours],
+    ["ddos", data.ddos.maxHours, data.ddos.minHours],
+    ["channelFailure", data.channelFailure.maxHours, data.channelFailure.minHours],
+  ];
+  for (const [key, max, min] of durationChecks) {
+    if (!(min >= 1 && max >= min && max <= 48)) {
+      errors.push(`${key}.minHours/maxHours: ожидается 1 ≤ min ≤ max ≤ 48`);
+    }
+  }
+
+  if (!(data.ddos.reputationGrowthPerPoint >= 0) || data.ddos.reputationGrowthPerPoint > 0.01) {
+    errors.push("ddos.reputationGrowthPerPoint: ожидается 0…0.01");
+  }
+  if (!(data.clientHacked.reputationHit > 0) || data.clientHacked.reputationHit > 0.2) {
+    errors.push("clientHacked.reputationHit: ожидается 0…0.2");
+  }
+  if (!(data.electricityPriceSpike.priceMult > 1) || data.electricityPriceSpike.priceMult > 2) {
+    errors.push("electricityPriceSpike.priceMult: ожидается 1…2");
+  }
+  if (
+    !Number.isInteger(data.electricityPriceSpike.minMonths) ||
+    !Number.isInteger(data.electricityPriceSpike.maxMonths) ||
+    data.electricityPriceSpike.minMonths < 1 ||
+    data.electricityPriceSpike.maxMonths < data.electricityPriceSpike.minMonths
+  ) {
+    errors.push("electricityPriceSpike.minMonths/maxMonths: ожидается 1 ≤ min ≤ max");
+  }
+
+  return errors;
+}
 
 /** Проверка reputation.json: веса, окно EMA, ставки тикетов и SLA. */
 export function validateReputation(data: ReputationFile): string[] {

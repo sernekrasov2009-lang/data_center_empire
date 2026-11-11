@@ -41,7 +41,16 @@ export type SimEventKind =
   | "ticketsResolved"
   | "reputationChanged"
   | "reviewPosted"
-  | "slaMissed";
+  | "slaMissed"
+  | "blackoutStarted"
+  | "blackoutEnded"
+  | "voltageSpike"
+  | "ddosStarted"
+  | "ddosEnded"
+  | "channelFailureStarted"
+  | "channelFailureEnded"
+  | "clientHacked"
+  | "electricityPriceSpiked";
 
 export interface SimEvent {
   id: number;
@@ -293,6 +302,26 @@ export interface ReputationState {
   lastReviewRating: number | null;
 }
 
+/* ── Случайные события и аварии (этап 8) ───────────────────────────── */
+
+/** Активное временное событие с концом в конкретный час. */
+export interface ActiveEventState {
+  id: number;
+  kind: "blackout" | "ddos" | "channelFailure";
+  startedAtHour: number;
+  endAtHour: number;
+}
+
+export interface WorldEventsState {
+  /** Активные события (не больше одного каждого вида). */
+  active: ActiveEventState[];
+  nextActiveEventId: number;
+  /** Временный множитель цены электричества от события «скачок цены», 1 = нет. */
+  electricityPriceEventMult: number;
+  /** Сколько часов осталось действия множителя цены (0 — неактивен). */
+  electricityPriceEventHoursLeft: number;
+}
+
 export interface GameState {
   version: number;
   seed: number;
@@ -306,6 +335,7 @@ export interface GameState {
   location: LocationState;
   services: ServicesState;
   reputation: ReputationState;
+  world: WorldEventsState;
   /** Заполняется, когда игра закончена (банкротство). */
   gameOver: GameOverInfo | null;
   stats: GameStats;

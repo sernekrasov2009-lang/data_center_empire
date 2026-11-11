@@ -844,6 +844,20 @@ export const useGameStore = create<GameStore>((set, get) => {
         notify("toast.reviewPosted", { value: (review.amount ?? 0).toFixed(1) });
       }
 
+      const worldToastMap: Record<string, { key: string; kind: ToastKind }> = {
+        blackoutStarted: { key: "toast.blackoutStarted", kind: "error" },
+        voltageSpike: { key: "toast.voltageSpike", kind: "error" },
+        ddosStarted: { key: "toast.ddosStarted", kind: "error" },
+        channelFailureStarted: { key: "toast.channelFailureStarted", kind: "error" },
+        clientHacked: { key: "toast.clientHacked", kind: "warn" },
+        electricityPriceSpiked: { key: "toast.electricityPriceSpiked", kind: "warn" },
+      };
+      for (const [kind, toast] of Object.entries(worldToastMap)) {
+        if (result.events.some((event) => event.kind === kind)) {
+          notify(toast.key, undefined, toast.kind);
+        }
+      }
+
       if (result.state.gameOver && !game.gameOver) {
         frameAccumulatorMs = 0;
         set({ overlay: "gameOver", returnTo: null });

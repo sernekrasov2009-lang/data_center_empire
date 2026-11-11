@@ -1,6 +1,6 @@
 import { balance, difficulties, economy as economyData, getDifficulty, type DifficultyId } from "../data";
 import { createRng } from "./core/rng";
-import { HOURS_PER_DAY, HOURS_PER_MONTH, HOURS_PER_YEAR } from "./core/time";
+import { getGameDate, HOURS_PER_DAY, HOURS_PER_MONTH, HOURS_PER_YEAR } from "./core/time";
 import { accrueHour, billMonth, createEconomy, driftElectricityPrice } from "./economy";
 import { createHardware, driftMarketPrice, refreshUsedMarket, tickHardware } from "./hardware";
 import { cloneLocation, createLocation, tickLocation } from "./location";
@@ -12,10 +12,11 @@ import {
   tickReputationHour,
 } from "./reputation";
 import { cloneServices, createServices, tickServices } from "./services";
+import { cloneWorldEvents, createWorldEvents, rollDailyEvents, tickWorldEvents } from "./world-events";
 import type { GameState, SimEvent, Speed } from "./types";
 
 /** Версия структуры GameState. Меняется при миграциях сохранений. */
-export const GAME_STATE_VERSION = 7;
+export const GAME_STATE_VERSION = 8;
 
 export const DEFAULT_COMPANY_NAME = "Uptime Hosting";
 
@@ -51,6 +52,7 @@ export function createGame(options: NewGameOptions = {}): GameState {
     location: createLocation(),
     services: createServices(),
     reputation: createReputation(),
+    world: createWorldEvents(),
     gameOver: null,
     stats: { ticks: 0 },
     events: [],
@@ -108,6 +110,7 @@ export function advanceTicks(state: GameState, ticks: number): AdvanceResult {
     location: cloneLocation(state.location),
     services: cloneServices(state.services),
     reputation: cloneReputation(state.reputation),
+    world: cloneWorldEvents(state.world),
     events: state.events.slice(),
   };
 
@@ -123,6 +126,11 @@ export function advanceTicks(state: GameState, ticks: number): AdvanceResult {
 
     const hardwareTick = tickHardware(next);
     next = hardwareTick.state;
+
+    const worldTick = tickWorldEvents(next);
+    for (const event of worldTick) {
+      pushEvent(next, events, event.kind, next.time.hour, event.amount, event.ref);
+    }
     for (const event of hardwareTick.events) {
       pushEvent(next, events, event.kind, next.time.hour, event.amount, event.ref);
     }
@@ -174,6 +182,12 @@ export function advanceTicks(state: GameState, ticks: number): AdvanceResult {
     }
 
     if (hour % HOURS_PER_DAY === 0) {
+      const date = getGameDate(hour);
+      const worldRoll = rollDailyEvents(next, date.month);
+      for (const event of worldRoll) {
+        pushEvent(next, events, event.kind, next.time.hour, event.amount, event.ref);
+      }
+
       const servicesTick = tickServices(next);
       next = servicesTick.state;
       for (const event of servicesTick.events) {

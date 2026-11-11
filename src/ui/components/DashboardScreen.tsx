@@ -27,7 +27,9 @@ export function DashboardScreen(): React.JSX.Element {
   const companyName = useGameStore((state) => state.game.companyName);
   const difficulty = useGameStore((state) => state.game.difficulty);
   const lastReport = useGameStore((state) => state.game.economy.reports.at(-1) ?? null);
+  const world = useGameStore((state) => state.game.world);
   const date = getGameDate(hour);
+  const priceSpikeActive = world.electricityPriceEventHoursLeft > 0;
 
   return (
     <div className="dashboard">
@@ -65,6 +67,36 @@ export function DashboardScreen(): React.JSX.Element {
       <ExpensesPanel />
       <ForecastPanel />
       <ReportsPanel />
+
+      <section className="panel panel--wide" data-kind="world">
+        <div className="panel__label">{t("world.active")}</div>
+        {world.active.length === 0 && !priceSpikeActive ? (
+          <p className="panel__hint">{t("world.activeEmpty")}</p>
+        ) : (
+          <ul className="checklist">
+            {world.active.map((event) => (
+              <li key={event.id}>
+                <span className="badge" data-state="warn">
+                  {t(`world.${event.kind}`)}
+                </span>{" "}
+                {t("world.endsIn", { hours: Math.max(0, event.endAtHour - hour) })}
+              </li>
+            ))}
+            {priceSpikeActive && (
+              <li>
+                <span className="badge" data-state="warn">
+                  {t("world.electricityPriceSpike", {
+                    percent: Math.round((world.electricityPriceEventMult - 1) * 100),
+                  })}
+                </span>{" "}
+                {t("world.electricityPriceLeft", {
+                  months: (world.electricityPriceEventHoursLeft / 720).toFixed(1),
+                })}
+              </li>
+            )}
+          </ul>
+        )}
+      </section>
 
       <section className="panel panel--wide">
         <div className="panel__label">{t("dash.stage")}</div>

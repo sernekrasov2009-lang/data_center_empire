@@ -4,7 +4,7 @@ import {
 } from "../data";
 import { buildStats, validateBuild } from "./components";
 import { placeNewOrder, previewNewOrder, startBuild } from "./hardware";
-import { activeBuilds, firstFreeSlot, getLocation, totalPowerDrawW } from "./location";
+import { firstFreeSlot, getLocation, placedBuilds, totalPowerDrawW } from "./location";
 import { resolveTickets } from "./reputation";
 import {
   toggleService,
@@ -99,7 +99,7 @@ export function botDay(state: GameState): BotDayResult {
   let blocker: string | null = null;
 
   // 1. Услуги: включаем по убыванию дохода на ресурс, если есть работающий сервер.
-  const hasServer = activeBuilds(next).length > 0;
+  const hasServer = placedBuilds(next).length > 0;
   if (hasServer) {
     const ranked = servicesData.services
       .slice()
@@ -288,7 +288,7 @@ export function summarizeDay(state: GameState, day: number): DaySummary {
     revenue: report ? Math.round(report.revenue * 100) / 100 : 0,
     expenses: report ? Math.round(report.totalExpenses * 100) / 100 : 0,
     clients: state.services.clients.length,
-    servers: activeBuilds(state).length,
+    servers: placedBuilds(state).length,
     reputation: Math.round(state.reputation.value * 100) / 100,
     uptimePct: Math.round(uptimePct * 10) / 10,
   };

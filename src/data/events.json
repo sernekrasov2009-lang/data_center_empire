@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "blackout": {
+    "chancePerDay": 0.003,
+    "summerChancePerDay": 0.006,
+    "minHours": 2,
+    "maxHours": 12
+  },
+  "voltageSpike": {
+    "chancePerDay": 0.002
+  },
+  "ddos": {
+    "chancePerDay": 0.005,
+    "reputationGrowthPerPoint": 0.001,
+    "reputationFrom": 0.7,
+    "minHours": 2,
+    "maxHours": 8
+  },
+  "channelFailure": {
+    "chancePerDay": 0.004,
+    "minHours": 2,
+    "maxHours": 12
+  },
+  "clientHacked": {
+    "chancePerDay": 0.002,
+    "reputationHit": 0.05
+  },
+  "electricityPriceSpike": {
+    "chancePerDay": 0.001,
+    "priceMult": 1.3,
+    "minMonths": 1,
+    "maxMonths": 3
+  }
+}
