@@ -220,12 +220,12 @@ describe("питание и PUE", () => {
 
   it("берёт интернет и аренду из состояния локации", () => {
     const state = createGame();
-    expect(fixedMonthlyCosts(state)).toEqual({ internet: 20, rent: 0 });
+    expect(fixedMonthlyCosts(state)).toEqual({ internet: 20, rent: 0, staff: 0 });
 
     const switched = setInternetPlan(state, "home-300");
     expect(switched.ok).toBe(true);
     if (!switched.ok) return;
-    expect(fixedMonthlyCosts(switched.state)).toEqual({ internet: 35, rent: 0 });
+    expect(fixedMonthlyCosts(switched.state)).toEqual({ internet: 35, rent: 0, staff: 0 });
   });
 });
 

@@ -1,4 +1,5 @@
 import {
+  staffData,
   economy,
   findComponent,
   locationData,
@@ -18,6 +19,7 @@ import {
   restartServers,
   setCooling,
 } from "./location";
+import { hireStaff, staffCapByRevenue } from "./staff";
 import type { GameState } from "./types";
 
 /**
@@ -195,6 +197,25 @@ export function botDay(state: GameState): BotDayResult {
     if (result.ok) {
       next = result.state;
       decisions.push({ kind: "wait", detail: "серверы перезапущены после перегрева" });
+    }
+  }
+
+  // 2.10 Персонал (этап 10): нанимаем по приоритету, пока месячная выручка
+  // покрывает зарплаты (каждые $1200 выручки — один сотрудник).
+  const staffCap = staffCapByRevenue(next);
+  if (next.staff.employees.length < staffCap) {
+    const priority = ["support", "sales", "sysadmin", "network", "electrician", "security"];
+    for (const roleId of priority) {
+      if (next.staff.employees.some((employee) => employee.roleId === roleId)) continue;
+      const role = staffData.roles.find((candidate) => candidate.id === roleId)!;
+      // Нанимаем только если взнос по карману и зарплата покрыта выручкой.
+      if (next.money < Math.round(role.salaryPerMonth * staffData.hiring.feeMult)) continue;
+      const result = hireStaff(next, roleId);
+      if (result.ok) {
+        next = result.state;
+        decisions.push({ kind: "wait", detail: `нанят ${role.id}, $${result.cost}` });
+      }
+      break;
     }
   }
 

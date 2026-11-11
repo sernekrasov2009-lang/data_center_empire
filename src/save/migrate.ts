@@ -7,6 +7,9 @@ import {
   hardware as hardwareData,
   locationData,
   servicesData,
+  staffData,
+  STAFF_ROLE_IDS,
+  type StaffRoleId,
   type ServiceId,
   type DifficultyId,
   type PowerOffReason,
@@ -20,11 +23,14 @@ import {
   createReputation,
   createRng,
   createServices,
+  createStaff,
   cloneReputation,
   createWorldEvents,
   refreshUsedMarket,
   type ServiceState,
   type ServicesState,
+  type StaffMember,
+  type StaffState,
 } from "../sim";
 import type {
   BuildPart,
@@ -114,6 +120,7 @@ function asExpenses(value: unknown): ExpenseBreakdown {
     electricity: Math.max(0, asNumber(source.electricity, 0)),
     internet: Math.max(0, asNumber(source.internet, 0)),
     rent: Math.max(0, asNumber(source.rent, 0)),
+    staff: Math.max(0, asNumber(source.staff, 0)),
   };
 }
 
@@ -534,6 +541,40 @@ function asReputation(value: unknown): ReputationState {
   };
 }
 
+/** Санитизация блока staff (этап 10). */
+function asStaff(value: unknown): StaffState {
+  if (!isRecord(value)) return createStaff();
+  const employees: StaffMember[] = [];
+  if (Array.isArray(value.employees)) {
+    for (const raw of value.employees) {
+      if (!isRecord(raw)) continue;
+      const roleId = typeof raw.roleId === "string" ? raw.roleId : "";
+      if (!STAFF_ROLE_IDS.includes(roleId as StaffRoleId)) continue;
+      const level = asNumber(raw.level, 1);
+      employees.push({
+        id: Math.max(1, Math.floor(asNumber(raw.id, 0))),
+        roleId: roleId as StaffRoleId,
+        level: Math.min(staffData.leveling.maxLevel, Math.max(1, Math.floor(level))),
+        hiredAtHour: Math.max(0, Math.floor(asNumber(raw.hiredAtHour, 0))),
+      });
+    }
+  }
+  // Один сотрудник на роль: дубликаты отбрасываем.
+  const seen = new Set<string>();
+  const unique = employees.filter((employee) => {
+    if (seen.has(employee.roleId)) return false;
+    seen.add(employee.roleId);
+    return true;
+  });
+  return {
+    employees: unique,
+    nextEmployeeId: Math.max(
+      unique.reduce((max, employee) => Math.max(max, employee.id), 0) + 1,
+      Math.floor(asNumber(value.nextEmployeeId, 1)),
+    ),
+  };
+}
+
 /**
  * Приводит слоты сборок в согласованный вид: один сервер — один слот,
  * лишние слоты снимаются, готовые серверы автоматически занимают свободные места.
@@ -636,6 +677,7 @@ export function migrateGame(raw: unknown): GameState {
     services: asServices(raw.services, asHardware(raw.hardware)),
     reputation: asReputation(raw.reputation),
     world: createWorldEvents(),
+    staff: asStaff(raw.staff),
     gameOver: asGameOver(raw.gameOver),
     stats: { ticks: Math.max(0, Math.floor(isRecord(raw.stats) ? asNumber(raw.stats.ticks, 0) : 0)) },
     events: asEvents(raw.events),
@@ -653,6 +695,7 @@ export function migrateGame(raw: unknown): GameState {
   // Миграция 5 → 6: появились услуги и клиенты; пустой блок создаётся с дефолтами.
   // Миграция 6 → 7: появилась репутация/аптайм/тикеты; санитизируется как блок выше.
   // Миграция 7 → 8: появились мировые события; активных при загрузке нет.
+  // Миграция 8 → 9: появился персонал; пустой блок — никто не нанят.
   const withSlots = reconcileSlots(game);
   return refreshUsedMarket(withSlots).state;
 }

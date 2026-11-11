@@ -84,7 +84,12 @@ describe("электричество и счета", () => {
     expect(report.totalExpenses).toBeCloseTo(projected.total, 8);
     expect(report.net).toBeCloseTo(-projected.total, 8);
     expect(report.moneyAfter).toBeCloseTo(result.state.money, 8);
-    expect(result.state.economy.accrual).toEqual({ electricity: 0, internet: 0, rent: 0 });
+    expect(result.state.economy.accrual).toEqual({
+      electricity: 0,
+      internet: 0,
+      rent: 0,
+      staff: 0,
+    });
     expect(result.state.economy.lifetime.expenses).toBeCloseTo(projected.total, 8);
   });
 

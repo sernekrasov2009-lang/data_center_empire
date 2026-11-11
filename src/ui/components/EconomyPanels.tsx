@@ -126,6 +126,17 @@ export function ExpensesPanel(): React.JSX.Element {
           <span className="econ-row__value">{formatMoney(-fixed.rent, language, numberFormat)}</span>
         </div>
         <div className="econ-row__hint">{t("econ.hint.rent")}</div>
+        {fixed.staff > 0 && (
+          <>
+            <div className="econ-row">
+              <span className="econ-row__label">{t("econ.staff")}</span>
+              <span className="econ-row__value">
+                {formatMoney(-fixed.staff, language, numberFormat)}
+              </span>
+            </div>
+            <div className="econ-row__hint">{t("econ.hint.staff")}</div>
+          </>
+        )}
         <div className="econ-row econ-row--total">
           <span className="econ-row__label">{t("econ.total")}</span>
           <span className="econ-row__value">{formatMoney(-projected.total, language, numberFormat)}</span>

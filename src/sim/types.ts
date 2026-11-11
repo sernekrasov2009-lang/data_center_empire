@@ -1,4 +1,11 @@
-import type { ComponentCondition, DifficultyId, PowerOffReason, ServiceId, Speed } from "../data";
+import type {
+  ComponentCondition,
+  DifficultyId,
+  PowerOffReason,
+  ServiceId,
+  Speed,
+  StaffRoleId,
+} from "../data";
 
 export type { Speed };
 
@@ -55,7 +62,10 @@ export type SimEventKind =
   | "upsBought"
   | "stabilizerBought"
   | "blackoutPrevented"
-  | "spikePrevented";
+  | "spikePrevented"
+  | "staffHired"
+  | "staffFired"
+  | "staffPromoted";
 
 export interface SimEvent {
   id: number;
@@ -78,6 +88,7 @@ export interface ExpenseBreakdown {
   electricity: number;
   internet: number;
   rent: number;
+  staff: number;
 }
 
 /** Отчёт за закрытый месяц. */
@@ -333,6 +344,21 @@ export interface WorldEventsState {
   electricityPriceEventHoursLeft: number;
 }
 
+export interface StaffMember {
+  /** Уникальный id сотрудника. */
+  id: number;
+  roleId: StaffRoleId;
+  /** Уровень 1–5, растёт со стажем. */
+  level: number;
+  /** Игровой час найма. */
+  hiredAtHour: number;
+}
+
+export interface StaffState {
+  employees: StaffMember[];
+  nextEmployeeId: number;
+}
+
 export interface GameState {
   version: number;
   seed: number;
@@ -347,6 +373,7 @@ export interface GameState {
   services: ServicesState;
   reputation: ReputationState;
   world: WorldEventsState;
+  staff: StaffState;
   /** Заполняется, когда игра закончена (банкротство). */
   gameOver: GameOverInfo | null;
   stats: GameStats;

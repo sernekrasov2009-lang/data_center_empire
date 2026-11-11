@@ -12,11 +12,12 @@ import {
   tickReputationHour,
 } from "./reputation";
 import { cloneServices, createServices, tickServices } from "./services";
+import { cloneStaff, createStaff, tickStaff } from "./staff";
 import { cloneWorldEvents, createWorldEvents, rollDailyEvents, tickWorldEvents } from "./world-events";
 import type { GameState, SimEvent, Speed } from "./types";
 
 /** Версия структуры GameState. Меняется при миграциях сохранений. */
-export const GAME_STATE_VERSION = 8;
+export const GAME_STATE_VERSION = 9;
 
 export const DEFAULT_COMPANY_NAME = "Uptime Hosting";
 
@@ -53,6 +54,7 @@ export function createGame(options: NewGameOptions = {}): GameState {
     services: createServices(),
     reputation: createReputation(),
     world: createWorldEvents(),
+    staff: createStaff(),
     gameOver: null,
     stats: { ticks: 0 },
     events: [],
@@ -108,6 +110,7 @@ export function advanceTicks(state: GameState, ticks: number): AdvanceResult {
       lifetime: { ...state.economy.lifetime },
     },
     location: cloneLocation(state.location),
+    staff: cloneStaff(state.staff),
     services: cloneServices(state.services),
     reputation: cloneReputation(state.reputation),
     world: cloneWorldEvents(state.world),
@@ -202,6 +205,12 @@ export function advanceTicks(state: GameState, ticks: number): AdvanceResult {
       ).length;
       const reputationDay = tickReputationDay(next, incidents);
       for (const event of reputationDay) {
+        pushEvent(next, events, event.kind, next.time.hour, event.amount, event.ref);
+      }
+
+      // Персонал (этап 10): рост уровней со стажем.
+      const staffDay = tickStaff(next);
+      for (const event of staffDay) {
         pushEvent(next, events, event.kind, next.time.hour, event.amount, event.ref);
       }
     }

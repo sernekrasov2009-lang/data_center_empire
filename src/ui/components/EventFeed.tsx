@@ -109,6 +109,10 @@ export function EventFeed(): React.JSX.Element {
                   {event.kind === "blackoutPrevented" &&
                     t("feed.blackoutPrevented", { amount: Math.round(event.amount ?? 0) })}
                   {event.kind === "spikePrevented" && t("feed.spikePrevented")}
+                  {event.kind === "staffHired" && t("feed.staffHired")}
+                  {event.kind === "staffFired" && t("feed.staffFired")}
+                  {event.kind === "staffPromoted" &&
+                    t("feed.staffPromoted", { amount: Math.round(event.amount ?? 0) })}
                 </span>
               </li>
             );

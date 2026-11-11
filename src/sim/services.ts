@@ -9,6 +9,7 @@ import { buildStatsForBuild } from "./components";
 import { nextFloat } from "./core/rng";
 import { DAYS_PER_MONTH, HOURS_PER_MONTH } from "./core/time";
 import { activeBuilds } from "./location";
+import { effectStrength } from "./staff";
 import type { GameState, HardwareBuild, ServicesState } from "./types";
 
 export type ServiceErrorCode =
@@ -86,7 +87,9 @@ export function dailyDemand(state: GameState, serviceId: ServiceId): number {
   const ratio = entry.priceMult; // P / P_рынок
   const priceFactor = Math.pow(ratio, -priceElasticity);
   const reputationFactor = Math.pow(Math.max(0.01, state.reputation.value), 1.5);
-  return definition.baseDemandPerDay * reputationFactor * priceFactor;
+  // Менеджер по продажам (этап 10): +приток до 90%.
+  const salesBoost = 1 + effectStrength(state, "demandBoost");
+  return definition.baseDemandPerDay * reputationFactor * priceFactor * salesBoost;
 }
 
 /**

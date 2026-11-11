@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "hiring": {
+    "feeMult": 0.5,
+    "firingSeveranceMult": 1
+  },
+  "leveling": {
+    "maxLevel": 5,
+    "promotionAfterDays": 90,
+    "salaryPerLevelMult": 1.2
+  },
+  "roles": [
+    {
+      "id": "sysadmin",
+      "title": "Сисадмин",
+      "salaryPerMonth": 2500,
+      "effect": "repairSpeed",
+      "effectDesc": "Ускоряет ремонт деталей",
+      "strengthPerLevel": 0.05
+    },
+    {
+      "id": "network",
+      "title": "Сетевой инженер",
+      "salaryPerMonth": 3200,
+      "effect": "channelResilience",
+      "effectDesc": "Сокращает длительность DDoS и сбоев канала",
+      "strengthPerLevel": 0.05
+    },
+    {
+      "id": "electrician",
+      "title": "Электрик",
+      "salaryPerMonth": 2800,
+      "effect": "powerResilience",
+      "effectDesc": "Сокращает длительность блэкаутов",
+      "strengthPerLevel": 0.05
+    },
+    {
+      "id": "support",
+      "title": "Поддержка",
+      "salaryPerMonth": 1500,
+      "effect": "supportScore",
+      "effectDesc": "Повышает оценку поддержки, снижает отток",
+      "strengthPerLevel": 0.1
+    },
+    {
+      "id": "sales",
+      "title": "Менеджер по продажам",
+      "salaryPerMonth": 2200,
+      "effect": "demandBoost",
+      "effectDesc": "Повышает приток клиентов",
+      "strengthPerLevel": 0.1
+    },
+    {
+      "id": "security",
+      "title": "Безопасник",
+      "salaryPerMonth": 3500,
+      "effect": "hackProtection",
+      "effectDesc": "Снижает риск взлома клиентов",
+      "strengthPerLevel": 0.15
+    }
+  ]
+}

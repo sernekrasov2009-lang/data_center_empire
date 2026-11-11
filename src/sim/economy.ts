@@ -1,5 +1,6 @@
 import { economy as economyData, getDifficulty, getElectricityTariff, getInternetPlan } from "../data";
 import { getLocation, totalPowerDrawW } from "./location";
+import { monthlyPayroll } from "./staff";
 import { accrueRevenueHour, closeMonthRevenue, projectedMonthlyRevenue } from "./services";
 import { nextFloat } from "./core/rng";
 import { HOURS_PER_DAY, HOURS_PER_MONTH, getGameDate } from "./core/time";
@@ -10,7 +11,7 @@ export const FORECAST_MONTHS = 3;
 
 export function createEconomy(): EconomyState {
   return {
-    accrual: { electricity: 0, internet: 0, rent: 0 },
+    accrual: { electricity: 0, internet: 0, rent: 0, staff: 0 },
     reports: [],
     lifetime: { revenue: 0, expenses: 0 },
     electricityPriceMult: 1,
@@ -44,9 +45,15 @@ export function monthElectricityCost(
 }
 
 /** Постоянные месячные расходы: интернет по выбранному тарифу и аренда локации. */
-export function fixedMonthlyCosts(state: GameState): { internet: number; rent: number } {
+export function fixedMonthlyCosts(
+  state: GameState,
+): { internet: number; rent: number; staff: number } {
   const plan = getInternetPlan(state.location.internetPlanId);
-  return { internet: plan.pricePerMonth, rent: getLocation(state).rentPerMonth };
+  return {
+    internet: plan.pricePerMonth,
+    rent: getLocation(state).rentPerMonth,
+    staff: monthlyPayroll(state),
+  };
 }
 
 /** Итоговый прогноз счёта за полный месяц при заданном множителе цены. */
@@ -60,7 +67,8 @@ export function projectedMonthlyExpenses(
     electricity,
     internet: fixed.internet,
     rent: fixed.rent,
-    total: electricity + fixed.internet + fixed.rent,
+    staff: fixed.staff,
+    total: electricity + fixed.internet + fixed.rent + fixed.staff,
   };
 }
 
@@ -104,8 +112,10 @@ export function billMonth(state: GameState, hour: number): BillResult {
     electricity: state.economy.accrual.electricity,
     internet: fixed.internet,
     rent: fixed.rent,
+    staff: fixed.staff,
   };
-  const totalExpenses = expenses.electricity + expenses.internet + expenses.rent;
+  const totalExpenses =
+    expenses.electricity + expenses.internet + expenses.rent + expenses.staff;
   const moneyAfter = state.money + revenue.revenue - totalExpenses;
   const report: MonthlyReport = {
     hour,
@@ -129,7 +139,7 @@ export function billMonth(state: GameState, hour: number): BillResult {
       money: moneyAfter,
       economy: {
         ...state.economy,
-        accrual: { electricity: 0, internet: 0, rent: 0 },
+        accrual: { electricity: 0, internet: 0, rent: 0, staff: 0 },
         reports,
         lifetime: {
           revenue: state.economy.lifetime.revenue + report.revenue,

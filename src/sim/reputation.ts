@@ -2,6 +2,7 @@ import { getService, reputationData, type ServiceId } from "../data";
 import { nextFloat } from "./core/rng";
 import { DAYS_PER_MONTH } from "./core/time";
 import { activeBuilds, cloneState } from "./location";
+import { effectStrength } from "./staff";
 import { samplePoisson } from "./services";
 import type { GameState, ReputationState, ServiceUptime } from "./types";
 
@@ -112,9 +113,11 @@ export function tickReputationDay(
       ? Math.min(1, reputation.goodHours / reputation.hoursWithClients)
       : 1;
   const openTickets = reputation.openTickets.length;
+  // Поддержка (этап 10): штраф тикетов слабее — каждые 14 открытых вместо 10.
+  const ticketsPerPenalty = 10 + Math.round(effectStrength(state, "supportScore") * 4);
   const supportScore = Math.max(
     0,
-    1 - Math.floor(openTickets / 10) * reputationData.tickets.scorePenaltyPer10Open,
+    1 - Math.floor(openTickets / ticketsPerPenalty) * reputationData.tickets.scorePenaltyPer10Open,
   );
 
   const weights = reputationData.ema.weights;

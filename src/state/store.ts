@@ -31,12 +31,15 @@ import {
   toggleService as applyToggleService,
   setPaused,
   setSpeed as applySpeed,
+  fireStaff as applyFireStaff,
+  hireStaff as applyHireStaff,
   startBuild as applyStartBuild,
   togglePause as applyTogglePause,
   type GameState,
   type HardwareFailure,
   type LocationFailure,
   type ServiceFailure,
+  type StaffFailure,
   type SimEvent,
   type Speed,
 } from "../sim";
@@ -45,7 +48,7 @@ import { createDefaultSettings, mergeSettings, type Settings } from "./settings"
 import { formatMoney } from "../ui/format";
 
 export type Screen = "menu" | "game";
-export type GameView = "dashboard" | "build" | "warehouse" | "location" | "services";
+export type GameView = "dashboard" | "build" | "warehouse" | "location" | "services" | "staff";
 export type Overlay = "newGame" | "slots" | "pause" | "settings" | "gameOver" | null;
 export type SlotMode = "save" | "load";
 export type ToastKind = "info" | "warn" | "error";
@@ -140,6 +143,8 @@ interface GameStore {
   buyUps: () => void;
   buyStabilizer: () => void;
   moveLocation: (locationId: string) => void;
+  hireStaff: (roleId: string) => void;
+  fireStaff: (employeeId: number) => void;
   resetBreaker: () => void;
   restartServers: () => void;
   setServicePrice: (serviceId: ServiceId, priceMult: number) => void;
@@ -229,6 +234,10 @@ export const useGameStore = create<GameStore>((set, get) => {
 
   function notifyServiceFailure(failure: ServiceFailure): void {
     notify(`services.error.${failure.code}`, failure.params, "error");
+  }
+
+  function notifyStaffFailure(failure: StaffFailure): void {
+    notify(`staff.error.${failure.code}`, failure.params, "error");
   }
 
   async function autosave(): Promise<void> {
@@ -615,6 +624,32 @@ export const useGameStore = create<GameStore>((set, get) => {
       notify("toast.locationMoved", undefined, "info");
     },
 
+    hireStaff: (roleId) => {
+      const { settings } = get();
+      const result = applyHireStaff(get().game, roleId);
+      if (!result.ok) {
+        notifyStaffFailure(result.failure);
+        return;
+      }
+      set({ game: result.state, dirty: true });
+      notify("toast.staffHired", {
+        cost: formatMoney(result.cost, settings.game.language, settings.game.numberFormat),
+      });
+    },
+
+    fireStaff: (employeeId) => {
+      const { settings } = get();
+      const result = applyFireStaff(get().game, employeeId);
+      if (!result.ok) {
+        notifyStaffFailure(result.failure);
+        return;
+      }
+      set({ game: result.state, dirty: true });
+      notify("toast.staffFired", {
+        cost: formatMoney(result.cost, settings.game.language, settings.game.numberFormat),
+      });
+    },
+
     resetBreaker: () => {
       const result = applyResetBreaker(get().game);
       if (!result.ok) {
@@ -895,6 +930,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         electricityPriceSpiked: { key: "toast.electricityPriceSpiked", kind: "warn" },
         blackoutPrevented: { key: "toast.blackoutPrevented", kind: "info" },
         spikePrevented: { key: "toast.spikePrevented", kind: "info" },
+        staffPromoted: { key: "toast.staffPromoted", kind: "info" },
       };
       for (const [kind, toast] of Object.entries(worldToastMap)) {
         if (result.events.some((event) => event.kind === kind)) {

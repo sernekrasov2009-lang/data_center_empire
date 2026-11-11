@@ -102,7 +102,7 @@ describe("миграции сохранений", () => {
     const game = migrateGame({ ...legacy, version: 2 });
     expect(game.version).toBe(GAME_STATE_VERSION);
     expect(game.economy).toEqual({
-      accrual: { electricity: 0, internet: 0, rent: 0 },
+      accrual: { electricity: 0, internet: 0, rent: 0, staff: 0 },
       reports: [],
       lifetime: { revenue: 0, expenses: 0 },
       electricityPriceMult: 1,

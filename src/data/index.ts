@@ -6,6 +6,7 @@ import rawLocation from "./location.json";
 import rawReputation from "./reputation.json";
 import rawServices from "./services.json";
 import rawEvents from "./events.json";
+import rawStaff from "./staff.json";
 
 /** Скорости игры. 0 — пауза (DESIGN.md, разд. 1). */
 export type Speed = 0 | 1 | 5 | 20 | 60;
@@ -650,6 +651,101 @@ export interface EventsFile {
 }
 
 export const eventsData = rawEvents as EventsFile;
+
+/* ── Персонал и автоматизация (этап 10, DESIGN.md §8) ────────────── */
+
+export type StaffRoleId = "sysadmin" | "network" | "electrician" | "support" | "sales" | "security";
+
+export const STAFF_ROLE_IDS: readonly StaffRoleId[] = [
+  "sysadmin",
+  "network",
+  "electrician",
+  "support",
+  "sales",
+  "security",
+];
+
+export type StaffEffect =
+  | "repairSpeed"
+  | "channelResilience"
+  | "powerResilience"
+  | "supportScore"
+  | "demandBoost"
+  | "hackProtection";
+
+export interface StaffRoleDefinition {
+  id: StaffRoleId;
+  title: string;
+  salaryPerMonth: number;
+  effect: StaffEffect;
+  effectDesc: string;
+  /** Доля эффекта за один уровень (например 0,05 → на 5 уровне 0,25). */
+  strengthPerLevel: number;
+}
+
+export interface StaffFile {
+  version: number;
+  hiring: {
+    /** Взнос при найме, доля месячной зарплаты. */
+    feeMult: number;
+    /** Выходное пособие при увольнении, доля месячной зарплаты. */
+    firingSeveranceMult: number;
+  };
+  leveling: {
+    maxLevel: number;
+    /** Через сколько дней работы сотрудник растёт в уровне. */
+    promotionAfterDays: number;
+    /** Зарплата × 1,2 за каждый уровень сверх первого. */
+    salaryPerLevelMult: number;
+  };
+  roles: StaffRoleDefinition[];
+}
+
+export const staffData = rawStaff as StaffFile;
+
+/** Проверка staff.json: роли, зарплаты, прогрессия уровней. */
+export function validateStaff(data: StaffFile): string[] {
+  const errors: string[] = [];
+
+  if (!Number.isInteger(data.version) || data.version < 1) {
+    errors.push("version: ожидается целое число ≥ 1");
+  }
+  if (!(data.hiring.feeMult >= 0 && data.hiring.feeMult <= 2)) {
+    errors.push("hiring.feeMult: ожидается 0…2");
+  }
+  if (!(data.hiring.firingSeveranceMult >= 0 && data.hiring.firingSeveranceMult <= 3)) {
+    errors.push("hiring.firingSeveranceMult: ожидается 0…3");
+  }
+  if (!Number.isInteger(data.leveling.maxLevel) || data.leveling.maxLevel < 1 || data.leveling.maxLevel > 10) {
+    errors.push("leveling.maxLevel: ожидается целое 1…10");
+  }
+  if (!(data.leveling.promotionAfterDays >= 7) || data.leveling.promotionAfterDays > 365) {
+    errors.push("leveling.promotionAfterDays: ожидается 7…365");
+  }
+  if (!(data.leveling.salaryPerLevelMult >= 1 && data.leveling.salaryPerLevelMult <= 2)) {
+    errors.push("leveling.salaryPerLevelMult: ожидается 1…2");
+  }
+
+  const roleIds = data.roles.map((role) => role.id);
+  if (roleIds.length !== STAFF_ROLE_IDS.length) {
+    errors.push(`roles: нужно ${STAFF_ROLE_IDS.length} ролей`);
+  }
+  if (new Set(roleIds).size !== roleIds.length) {
+    errors.push("roles: id должны быть уникальны");
+  }
+  for (const role of data.roles) {
+    const prefix = `roles.${role.id}`;
+    if (!STAFF_ROLE_IDS.includes(role.id)) errors.push(`${prefix}.id: неизвестная роль`);
+    if (!(role.salaryPerMonth >= 100 && role.salaryPerMonth <= 10_000)) {
+      errors.push(`${prefix}.salaryPerMonth: ожидается 100…10 000`);
+    }
+    if (!(role.strengthPerLevel > 0 && role.strengthPerLevel * data.leveling.maxLevel <= 0.9)) {
+      errors.push(`${prefix}.strengthPerLevel: слишком слабый или сильный эффект`);
+    }
+  }
+
+  return errors;
+}
 
 /** Проверка events.json: вероятности в 0…1, длительности положительные. */
 export function validateEvents(data: EventsFile): string[] {

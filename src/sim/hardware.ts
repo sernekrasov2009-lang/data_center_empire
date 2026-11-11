@@ -11,6 +11,7 @@ import {
   type BuildError,
 } from "./components";
 import { assignFreeSlot, serversRunning } from "./location";
+import { effectStrength } from "./staff";
 import type {
   GameState,
   HardwareBuild,
@@ -451,9 +452,11 @@ function repairHoursFor(state: GameState, componentId: string): { hours: number;
   const spareIndex = state.hardware.parts.findIndex((part) => part.componentId === componentId);
   if (spareIndex >= 0) {
     state.hardware.parts.splice(spareIndex, 1);
-    return { hours: hardwareData.repair.hoursWithSpare, spare: true };
+    const speed = 1 - effectStrength(state, "repairSpeed");
+    return { hours: Math.max(1, Math.round(hardwareData.repair.hoursWithSpare * speed)), spare: true };
   }
-  return { hours: hardwareData.repair.hoursWithoutSpare, spare: false };
+  const speed = 1 - effectStrength(state, "repairSpeed");
+  return { hours: Math.max(1, Math.round(hardwareData.repair.hoursWithoutSpare * speed)), spare: false };
 }
 
 /**

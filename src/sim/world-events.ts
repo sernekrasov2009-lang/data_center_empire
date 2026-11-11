@@ -1,4 +1,5 @@
 import { eventsData, locationData } from "../data";
+import { effectStrength } from "./staff";
 import { chance, nextFloat, nextInt } from "./core/rng";
 import { HOURS_PER_MONTH } from "./core/time";
 import type { ActiveEventState, GameState, WorldEventsState } from "./types";
@@ -82,7 +83,7 @@ export function rollDailyEvents(state: GameState, month: number): WorldEvent[] {
       ? eventsData.blackout.summerChancePerDay
       : eventsData.blackout.chancePerDay;
     if (chance(state.rng, blackoutChance)) {
-      const hours = nextInt(
+      let hours = nextInt(
         state.rng,
         eventsData.blackout.minHours,
         eventsData.blackout.maxHours,
@@ -92,6 +93,9 @@ export function rollDailyEvents(state: GameState, month: number): WorldEvent[] {
       if (hours <= upsHours) {
         events.push({ kind: "blackoutPrevented", amount: hours });
       } else {
+        // Электрик сокращает длительность блэкаута (этап 10).
+        const powerSpeed = 1 - effectStrength(state, "powerResilience");
+        hours = Math.max(1, Math.round(hours * powerSpeed));
         startEvent(state, "blackout", hours);
         state.location.powerOff = "blackout";
         events.push({ kind: "blackoutStarted", amount: hours });
@@ -137,7 +141,10 @@ export function rollDailyEvents(state: GameState, month: number): WorldEvent[] {
     const ddosChance =
       eventsData.ddos.chancePerDay + reputationExcess * 100 * eventsData.ddos.reputationGrowthPerPoint;
     if (chance(state.rng, ddosChance)) {
-      const hours = nextInt(state.rng, eventsData.ddos.minHours, eventsData.ddos.maxHours);
+      // Сетевой инженер сокращает длительность атаки (этап 10).
+      const netSpeed = 1 - effectStrength(state, "channelResilience");
+      const rolled = nextInt(state.rng, eventsData.ddos.minHours, eventsData.ddos.maxHours);
+      const hours = Math.max(1, Math.round(rolled * netSpeed));
       startEvent(state, "ddos", hours);
       events.push({ kind: "ddosStarted", amount: hours });
     }
@@ -146,11 +153,14 @@ export function rollDailyEvents(state: GameState, month: number): WorldEvent[] {
   // Сбой канала провайдера: 0,4%/день.
   if (!hasActive(world, "channelFailure") && state.location.powerOff === "none") {
     if (chance(state.rng, eventsData.channelFailure.chancePerDay)) {
-      const hours = nextInt(
+      const rolled = nextInt(
         state.rng,
         eventsData.channelFailure.minHours,
         eventsData.channelFailure.maxHours,
       );
+      // Сетевой инженер сокращает ремонт канала (этап 10).
+      const netSpeed = 1 - effectStrength(state, "channelResilience");
+      const hours = Math.max(1, Math.round(rolled * netSpeed));
       startEvent(state, "channelFailure", hours);
       state.location.powerOff = "channelFailure";
       events.push({ kind: "channelFailureStarted", amount: hours });
@@ -158,7 +168,10 @@ export function rollDailyEvents(state: GameState, month: number): WorldEvent[] {
   }
 
   // Взлом клиента: репутационный удар.
-  if (state.services.clients.length > 0 && chance(state.rng, eventsData.clientHacked.chancePerDay)) {
+  // Безопасник снижает шанс взлома (этап 10).
+  const hackChance =
+    eventsData.clientHacked.chancePerDay * (1 - effectStrength(state, "hackProtection"));
+  if (state.services.clients.length > 0 && chance(state.rng, hackChance)) {
     state.reputation.value = Math.max(
       0.2,
       state.reputation.value - eventsData.clientHacked.reputationHit,
