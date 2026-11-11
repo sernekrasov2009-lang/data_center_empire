@@ -41,8 +41,9 @@ describe("balance-sim (бот)", () => {
     const last = summaries.at(-1)!;
     expect(last.clients).toBeGreaterThanOrEqual(50);
     expect(last.money).toBeGreaterThan(0);
-    // Потолок домашней локации: больше 2 серверов бот поставить не может.
-    expect(last.servers).toBeLessThanOrEqual(2);
+    // С честными тарифами (гараж = commercial $0,09) бот успевает переехать
+    // в гараж и набрать больше серверов; потолок — 12 слотов гаража.
+    expect(last.servers).toBeLessThanOrEqual(12);
   });
 
   it("после заполнения слотов бот честно сообщает причину застоя", () => {

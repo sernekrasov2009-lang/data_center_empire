@@ -35,7 +35,23 @@
   },
   "moving": {
     "price": 300,
-    "downtimeHours": 24
+    "downtimeHours": 24,
+    "toColo": {
+      "price": 2000,
+      "downtimeHours": 48
+    }
+  },
+  "rack": {
+    "rentPerMonth": 500,
+    "slots": 12,
+    "powerW": 5000,
+    "maxRacks": 40
+  },
+  "rack": {
+    "rentPerMonth": 500,
+    "slots": 12,
+    "powerW": 5000,
+    "maxRacks": 40
   },
   "cooling": [
     { "id": "window", "conductanceWPerK": 25, "powerW": 0, "price": 0, "noiseDb": 0 },
@@ -64,6 +80,15 @@
       ],
       "defaultInternetPlanId": "garage-500",
       "defaultCoolingId": "fan"
+    },
+    {
+      "id": "colo",
+      "slots": 0,
+      "powerCapacityW": 0,
+      "rentPerMonth": 0,
+      "internetPlans": ["colo-10000"],
+      "defaultInternetPlanId": "colo-10000",
+      "defaultCoolingId": "crac"
     }
   ]
 }

@@ -1,6 +1,9 @@
 import { economy as economyData, getInternetPlan, locationData } from "../../data";
 import { useT, type Translate } from "../../i18n";
 import {
+  locationPowerCapacityW,
+  locationRentPerMonth,
+  locationSlots,
   buildNoiseDb,
   buildPowerW,
   coolingPowerW,
@@ -40,13 +43,16 @@ export function LocationScreen(): React.JSX.Element {
   const buyUps = useGameStore((state) => state.buyUps);
   const buyStabilizer = useGameStore((state) => state.buyStabilizer);
   const moveLocation = useGameStore((state) => state.moveLocation);
+  const buyRack = useGameStore((state) => state.buyRack);
   const resetBreaker = useGameStore((state) => state.resetBreaker);
   const restartServers = useGameStore((state) => state.restartServers);
 
   const definition = getLocation(game);
   const cooling = getSelectedCooling(game);
   const load = hardwareLoadW(game);
-  const capacity = definition.powerCapacityW;
+  const capacity = locationPowerCapacityW(game);
+  const slots = locationSlots(game);
+  const rent = locationRentPerMonth(game);
   const draw = totalPowerDrawW(game);
   const climate = locationData.climate;
   const pue = economyData.electricity.pue[definition.id];
@@ -121,6 +127,49 @@ export function LocationScreen(): React.JSX.Element {
       )}
 
       <div className="location__grid">
+        {definition.id === "colo" && (
+          <section className="panel panel--wide">
+            <div className="panel__label">{t("location.racks")}</div>
+            <div className="loc-options">
+              <article className="loc-option" data-current>
+                <div className="loc-option__head">
+                  <strong>{t("location.rack")}</strong>
+                  <span className="badge" data-state="ok">
+                    {t("location.rackCount", { count: game.location.ownedRacks })}
+                  </span>
+                </div>
+                <div className="loc-option__specs">
+                  <span>
+                    {t("location.coloRackInfo", {
+                      slots: locationData.rack.slots,
+                      watt: formatInt(locationData.rack.powerW, language),
+                      price: formatMoney(locationData.rack.rentPerMonth, language, numberFormat),
+                    })}
+                  </span>
+                  <span>{t("location.rackTotal", {
+                    slots,
+                    watt: formatInt(capacity, language),
+                  })}</span>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn--small btn--primary"
+                  disabled={
+                    game.location.ownedRacks >= locationData.rack.maxRacks ||
+                    game.money < locationData.rack.rentPerMonth
+                  }
+                  onClick={buyRack}
+                >
+                  {t("location.buyRack", {
+                    price: formatMoney(locationData.rack.rentPerMonth, language, numberFormat),
+                  })}
+                </button>
+              </article>
+            </div>
+            <p className="panel__hint">{t("location.rackHint")}</p>
+          </section>
+        )}
+
         <section className="panel">
           <div className="panel__label">{t("location.power")}</div>
           <div className="panel__value" data-state={powerState}>
@@ -151,7 +200,7 @@ export function LocationScreen(): React.JSX.Element {
             <div className="econ-row">
               <span className="econ-row__label">{t("location.rent")}</span>
               <span className="econ-row__value">
-                {formatMoney(definition.rentPerMonth, language, numberFormat)}
+                {formatMoney(rent, language, numberFormat)}
               </span>
             </div>
           </div>
@@ -189,7 +238,7 @@ export function LocationScreen(): React.JSX.Element {
         <section className="panel panel--wide">
           <div className="panel__label">{t("location.slots")}</div>
           <div className="loc-slots">
-            {Array.from({ length: definition.slots }, (_, slot) => {
+            {Array.from({ length: slots }, (_, slot) => {
               const build = placed.find((candidate) => candidate.slot === slot);
               return (
                 <article className="loc-slot" key={slot} data-filled={build !== undefined}>
@@ -458,6 +507,38 @@ export function LocationScreen(): React.JSX.Element {
                   onClick={() => moveLocation("garage")}
                 >
                   {t("location.move")}
+                </button>
+              </article>
+            )}
+
+            {definition.id === "garage" && (
+              <article className="loc-option">
+                <div className="loc-option__head">
+                  <strong>{t("location.moveToColo")}</strong>
+                  <span className="loc-option__price">
+                    {formatMoney(locationData.moving.toColo.price, language, numberFormat)}
+                  </span>
+                </div>
+                <div className="loc-option__specs">
+                  <span>{t("location.coloDesc")}</span>
+                  <span>
+                    {t("location.coloRackInfo", {
+                      slots: locationData.rack.slots,
+                      watt: formatInt(locationData.rack.powerW, language),
+                      price: formatMoney(locationData.rack.rentPerMonth, language, numberFormat),
+                    })}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn--small btn--primary"
+                  disabled={
+                    game.money < locationData.moving.toColo.price ||
+                    game.location.movingUntilHour !== null
+                  }
+                  onClick={() => moveLocation("colo")}
+                >
+                  {t("location.moveToColo")}
                 </button>
               </article>
             )}

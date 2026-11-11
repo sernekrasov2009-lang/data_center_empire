@@ -1,6 +1,7 @@
 import {
   RESEARCH_IDS,
   SERVICE_RESEARCH,
+  COLOCATION_SERVICE_ID,
   getResearch,
   researchData,
   type ResearchId,
@@ -78,6 +79,8 @@ export function researchBonuses(state: GameState): {
 
 /** Открыта ли услуга (стартовая или через завершённое исследование). */
 export function isServiceUnlocked(state: GameState, serviceId: ServiceId): boolean {
+  // Колокейшн открывает не исследование, а переезд в colo (этап 12).
+  if (serviceId === COLOCATION_SERVICE_ID) return state.location.id === "colo";
   const required = SERVICE_RESEARCH[serviceId];
   if (required === undefined) return true;
   return state.research.completed.includes(required as ResearchId);

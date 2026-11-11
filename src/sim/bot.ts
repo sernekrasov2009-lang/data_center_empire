@@ -9,7 +9,17 @@ import {
 } from "../data";
 import { buildStats, validateBuild } from "./components";
 import { placeNewOrder, previewNewOrder, startBuild } from "./hardware";
-import { firstFreeSlot, getLocation, placedBuilds, totalPowerDrawW } from "./location";
+import {
+  buyRack,
+  firstFreeSlot,
+  getLocation,
+  locationPowerCapacityW,
+  locationSlots,
+  placedBuilds,
+  returnRack,
+  setBuildSlot,
+  totalPowerDrawW,
+} from "./location";
 import { resolveTickets } from "./reputation";
 import {
   toggleService,
@@ -21,8 +31,9 @@ import {
   restartServers,
   setCooling,
 } from "./location";
-import { hireStaff, staffCapByRevenue } from "./staff";
+import { fireStaff, hireStaff, monthlyPayroll, staffCapByRevenue } from "./staff";
 import { researchAvailable, startResearch } from "./research";
+import { projectedMonthlyExpenses, projectedMonthlyIncome } from "./economy";
 import type { GameState } from "./types";
 
 /**
@@ -69,11 +80,21 @@ function recipeStats(recipe: BotRecipe) {
   return buildStats(recipe.partIds);
 }
 
-/** Маржинальный месячный доход от заполнения нового сервера текущими услугами. */
+/**
+ * Маржинальный месячный доход от заполнения нового сервера текущими услугами.
+ * Поправка на фактическую заполненность: новый сервер заполняется как
+ * существующие (среднее число клиентов на сервер против полной ёмкости).
+ * Без неё бот строил «мёртвые» серверы и тонул в аренде/электричестве
+ * при малом числе клиентов (DECISIONS 75).
+ */
 function marginalMonthlyRevenue(state: GameState, recipe: BotRecipe): number {
   const stats = recipeStats(recipe);
+  const servers = placedBuilds(state).length;
+  const avgClientsPerServer =
+    servers > 0 ? state.services.clients.length / servers : 0;
   // Сколько клиентов каждой услуги влезает на сервер, считаем по узкому месту.
   let monthly = 0;
+  let capacitySum = 0;
   for (const service of state.services.services) {
     if (!service.enabled) continue;
     const definition = servicesData.services.find((candidate) => candidate.id === service.id)!;
@@ -82,8 +103,12 @@ function marginalMonthlyRevenue(state: GameState, recipe: BotRecipe): number {
     const byDisk = Math.floor(stats.storageGb / definition.storageGbPerClient);
     const capacity = Math.max(0, Math.min(byCores, byRam, byDisk));
     monthly += capacity * definition.pricePerMonth * service.priceMult;
+    capacitySum += capacity;
   }
-  return monthly;
+  // Заполненность 0,25–1: первый сервер считаем четвертью ёмкости,
+  // дальше — по факту (полная ёмкость и полный клиентский поток редко сходятся).
+  const fill = servers > 0 ? Math.min(1, avgClientsPerServer / Math.max(1, capacitySum)) : 0.25;
+  return monthly * Math.max(0.25, fill);
 }
 
 /** Полные месячные расходы, добавляемые сервером: электричество по PUE. */
@@ -175,6 +200,58 @@ export function botDay(state: GameState): BotDayResult {
     }
   }
 
+  // 2.6.1 Colo (этап 12): гараж заполнен — переезжаем.
+  // Потолок гаража (12 слотов, ~$2200/мес из-за оттока по SLA) не даёт
+  // выручке вырасти, поэтому порог не по выручке, а по деньгам: стоимость
+  // переезда + запас на ~3 месяца colo-счетов (~$1000/мес).
+  if (next.location.id === "garage") {
+    const slot = firstFreeSlot(next);
+    const powerFull = totalPowerDrawW(next) >= locationPowerCapacityW(next) * 0.85;
+    if (
+      (slot === null || powerFull) &&
+      next.money >= locationData.moving.toColo.price + 5000
+    ) {
+      const result = moveLocation(next, "colo");
+      if (result.ok) {
+        next = result.state;
+        decisions.push({
+          kind: "moveLocation",
+          detail: `переезд в colo, $${result.cost}, 48 ч простоя`,
+        });
+      } else {
+        decisions.push({ kind: "warn", detail: `переезд в colo не удался: ${result.failure.code}` });
+      }
+    }
+  }
+
+  // 2.6.2 В colo: держим охлаждение CRAC и докупаем стойки по мере роста.
+  if (next.location.id === "colo") {
+    if (next.location.coolingId !== "crac" && next.money >= 5000 + 500) {
+      const result = setCooling(next, "crac");
+      if (result.ok && result.cost > 0) {
+        next = result.state;
+        decisions.push({ kind: "wait", detail: `куплен CRAC, $${result.cost}` });
+      }
+    }
+    const slot = firstFreeSlot(next);
+    // Стойку докупаем, только когда слоты почти кончились: аренда $500/мес
+    // за пустую стойку топит экономику при оттоке клиентов (DECISIONS 75).
+    const usedSlots = next.hardware.builds.filter((build) => build.slot !== null).length;
+    const totalSlots = locationSlots(next);
+    if (
+      slot === null &&
+      usedSlots >= totalSlots &&
+      next.location.ownedRacks < locationData.rack.maxRacks &&
+      next.money >= locationData.rack.rentPerMonth * 4
+    ) {
+      const result = buyRack(next);
+      if (result.ok) {
+        next = result.state;
+        decisions.push({ kind: "wait", detail: `арендована стойка, $${result.cost}` });
+      }
+    }
+  }
+
   // 2.7 Шум: без изоляции в гараже штрафы $50 съедают всю прибыль.
   // Изоляция −8 дБ возвращает шум под ночной лимит.
   if (!next.location.insulated && next.money >= locationData.insulation.price + 300) {
@@ -186,7 +263,13 @@ export function botDay(state: GameState): BotDayResult {
   }
 
   // 2.8 Перегрев: с ростом числа серверов вентилятора мало — покупаем сплит.
-  if (next.location.coolingId === "fan" && next.money >= 650 + 300) {
+  // При активном перегреве покупаем из любых денег: иначе вечный цикл
+  // shutdown → рестарт → shutdown и потеря всех клиентов (DECISIONS 75).
+  const overheated = next.location.powerOff === "overheat";
+  if (
+    next.location.coolingId === "fan" &&
+    (overheated || next.money >= 650 + 300)
+  ) {
     const result = setCooling(next, "split");
     if (result.ok && result.cost > 0) {
       next = result.state;
@@ -195,11 +278,57 @@ export function botDay(state: GameState): BotDayResult {
   }
 
   // 2.9 Аварийное отключение из-за перегрева: ждём остывания и включаем обратно.
-  if (next.location.powerOff === "overheat") {
+  // Если охлаждение не держит нагрузку — сначала копим на апгрейд (сплит),
+  // иначе рестарт уходит в вечный цикл shutdown → restart (DECISIONS 75).
+  const needCoolingUpgrade =
+    next.location.coolingId === "fan" && next.location.roomTempC >= 35;
+  if (next.location.powerOff === "overheat" && !needCoolingUpgrade) {
     const result = restartServers(next);
     if (result.ok) {
       next = result.state;
       decisions.push({ kind: "wait", detail: "серверы перезапущены после перегрева" });
+    }
+  }
+
+  // 2.9.1 Антикризис (DECISIONS 75): ушли в минус, а прогноз выручки не
+  // покрывает месячный счёт — снимаем серверы без клиентов со слотов:
+  // электричество падает сразу, клиенты не страдают. Порог строго
+  // отрицательный, иначе правило срезает нормальный рост.
+  {
+    const expenses = projectedMonthlyExpenses(next).total;
+    const income = projectedMonthlyIncome(next);
+    if (next.money < 0 && income < expenses) {
+      // Персонал: увольняем самого дорогого, если компенсация по карману.
+      const payroll = next.staff.employees.length;
+      if (payroll > 0) {
+        const dearest = next.staff.employees
+          .slice()
+          .sort((left, right) => right.level - left.level)[0]!;
+        const fire = fireStaff(next, dearest.id);
+        if (fire.ok) {
+          next = fire.state;
+          decisions.push({ kind: "wait", detail: `уволен ${dearest.roleId} (антикризис)` });
+        }
+      }
+      const idle = next.hardware.builds
+        .filter((build) => build.slot !== null)
+        .filter((build) => !next.services.clients.some((client) => client.buildId === build.id));
+      const victim = idle.at(-1);
+      if (victim) {
+        const result = setBuildSlot(next, victim.id, null);
+        if (result.ok) {
+          next = result.state;
+          decisions.push({ kind: "wait", detail: `сервер #${victim.id} снят со слота (антикризис)` });
+        }
+      }
+      // Стойка: вернуть лишнюю, если её слоты свободны (аренда падает).
+      if (next.location.id === "colo" && next.location.ownedRacks > 1) {
+        const back = returnRack(next);
+        if (back.ok) {
+          next = back.state;
+          decisions.push({ kind: "wait", detail: "стойка возвращена арендодателю (антикризис)" });
+        }
+      }
     }
   }
 
@@ -209,12 +338,14 @@ export function botDay(state: GameState): BotDayResult {
   const hireRevenue = next.economy.reports.at(-1)?.revenue ?? 0;
   if (next.staff.employees.length < staffCap) {
     const priority = ["support", "sales", "sysadmin", "network", "electrician", "security"];
+    const currentPayroll = monthlyPayroll(next);
     for (const roleId of priority) {
       if (next.staff.employees.some((employee) => employee.roleId === roleId)) continue;
       const role = staffData.roles.find((candidate) => candidate.id === roleId)!;
-      // Нанимаем, только если зарплата не больше 60% месячной выручки
-      // и взнос по карману (иначе счёт уходит в минус).
-      if (role.salaryPerMonth > hireRevenue * 0.6) continue;
+      // Нанимаем, только если суммарный фонд оплаты после найма не
+      // превысит 40% месячной выручки: иначе персонал топит счёт при
+      // падении выручки (осцилляция SLA-оттока, DECISIONS 75).
+      if (currentPayroll + role.salaryPerMonth > hireRevenue * 0.4) continue;
       if (next.money < Math.round(role.salaryPerMonth * staffData.hiring.feeMult)) continue;
       const result = hireStaff(next, roleId);
       if (result.ok) {
@@ -225,7 +356,12 @@ export function botDay(state: GameState): BotDayResult {
     }
   }
 
-  // 2.11 Исследования (этап 11): по приоритету, после вехи $1000/мес и с запасом.
+  // 2.11 Исследования (этап 11): по приоритету, после выручки $700/мес и с запасом.
+  // Порог опущен с $1000: рост выручки упирается в слоты/тепло гаража, а
+  // virtualization (+20% ёмкости услуг) ускоряет выход на colo (этап 12).
+  // Пока копим на проект — серверы не заказываем (иначе деньги всегда
+  // уходят в железо и исследования не стартуют никогда).
+  let savingForResearch = false;
   const researchPriority: ResearchId[] = [
     "virtualization",
     "raidBackups",
@@ -233,12 +369,15 @@ export function botDay(state: GameState): BotDayResult {
     "ddosProtection",
   ];
   const lastRevenue = next.economy.reports.at(-1)?.revenue ?? 0;
-  if (lastRevenue >= 1000) {
+  if (lastRevenue >= 700) {
     for (const id of researchPriority) {
       if (!researchAvailable(next, id)) continue;
       const project = getResearch(id);
       // Запускаем, только если остаётся резерв в половину стоимости.
-      if (next.money < project.cost * 1.5) continue;
+      if (next.money < project.cost * 1.5) {
+        savingForResearch = true;
+        break;
+      }
       const result = startResearch(next, id);
       if (result.ok) {
         next = result.state;
@@ -249,9 +388,13 @@ export function botDay(state: GameState): BotDayResult {
   }
 
   // 3. Заказ нового сервера, если окупается и есть место/мощность.
-  const ordered = tryOrderServer(next, decisions);
-  next = ordered.state;
-  if (ordered.blocker !== null) blocker = ordered.blocker;
+  if (savingForResearch) {
+    blocker = "копим на исследование";
+  } else {
+    const ordered = tryOrderServer(next, decisions);
+    next = ordered.state;
+    if (ordered.blocker !== null) blocker = ordered.blocker;
+  }
 
   return { state: next, decisions, blocker };
 }
@@ -302,21 +445,33 @@ function tryOrderServer(
   if (slot === null) {
     return {
       state: next,
-      blocker: `нет свободных слотов (локация «${getLocation(next).id}»: ${getLocation(next).slots})`,
+      blocker: `нет свободных слотов (локация «${getLocation(next).id}»: ${locationSlots(next)})`,
     };
   }
 
   // Автомат: заказываем сервер только если ИТ-нагрузка после добавления
   // не превысит ёмкость с запасом (PUE 1,8 умножается в экономике).
-  const locationId = getLocation(next).id as "home" | "garage";
-  const pue = economy.electricity.pue[locationId]; // 1,8 дом / 1,6 гараж
-  const tariffId = locationId === "home" ? "home" : "commercial";
+  const locationId = getLocation(next).id as "home" | "garage" | "colo";
+  const pue = economy.electricity.pue[locationId]; // 1,8 дом / 1,6 гараж / 1,5 colo
+  const tariffId = locationId === "home" ? "home" : locationId === "colo" ? "industrial" : "commercial";
   const pricePerKwh = economy.electricity.tariffs.find(
     (t: { id: string; pricePerKwh: number }) => t.id === tariffId,
   )!.pricePerKwh;
   const hoursPerMonth = 720; // 24 ч × 30 дн
-  const capacity = getLocation(next).powerCapacityW;
+  const capacity = locationPowerCapacityW(next);
   const currentDraw = totalPowerDrawW(next);
+
+  // Тепло (DECISIONS 75): без сплита серверы перегреются. Летом вентилятор
+  // (C=40) держит до shutdownC 55 °C при +21 К: 34 °C наружная + 21 К
+  // = 840 Вт. Оставляем запас 10%: дальше копим на сплит ($650).
+  const maxHeatW = 750;
+  const fanOnly = next.location.coolingId === "fan" || next.location.coolingId === "window";
+  if (fanOnly && currentDraw + recipePower(RECIPES[0]!) > maxHeatW) {
+    return {
+      state: next,
+      blocker: "охлаждение fan/window не держит больше серверов — копим на сплит",
+    };
+  }
 
   let best: { recipe: BotRecipe; paybackMonths: number; cost: number } | null = null;
   let powerBlocked = false;
@@ -333,8 +488,11 @@ function tryOrderServer(
       moneyBlocked = true;
       continue;
     }
-    // Оставляем резерв на счёт за месяц.
-    if (next.money - cost < 200) {
+    // Оставляем резерв на полный месячный счёт: электричество + интернет +
+    // аренда (в colo — со стойками) + зарплаты. Фиксированных $200 в colo
+    // не хватает — бот заказывал серверы и банкротился (DECISIONS 75).
+    const billReserve = projectedMonthlyExpenses(next).total;
+    if (next.money - cost < billReserve) {
       moneyBlocked = true;
       continue;
     }
@@ -354,7 +512,7 @@ function tryOrderServer(
 
   if (!best) {
     if (powerBlocked) return { state: next, blocker: "не хватает мощности автомата" };
-    if (moneyBlocked) return { state: next, blocker: "не хватает денег (с резервом $200)" };
+    if (moneyBlocked) return { state: next, blocker: "не хватает денег (резерв = месячный счёт)" };
     if (paybackBlocked) return { state: next, blocker: "нет окупаемых рецептов" };
     return { state: next, blocker: "нет доступных рецептов" };
   }

@@ -18,7 +18,7 @@ import { cloneWorldEvents, createWorldEvents, rollDailyEvents, tickWorldEvents }
 import type { GameState, SimEvent, Speed } from "./types";
 
 /** Версия структуры GameState. Меняется при миграциях сохранений. */
-export const GAME_STATE_VERSION = 10;
+export const GAME_STATE_VERSION = 11;
 
 export const DEFAULT_COMPANY_NAME = "Uptime Hosting";
 

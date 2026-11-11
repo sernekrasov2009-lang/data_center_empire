@@ -645,6 +645,19 @@
   "location.error.locationNotAdjacent": "You can only move to the next location.",
   "location.error.alreadyMoving": "A move is already in progress.",
   "location.error.alreadyOwned": "Already purchased.",
+  "location.error.racksMax": "The hall is full: no racks left.",
+  "location.error.racksNotHere": "Racks are rented in a colo only.",
+  "location.kind.colo": "Rented hall (colo)",
+  "location.moveToColo": "Move to colo",
+  "location.coloDesc": "Rented hall: 42U racks, PUE 1.5, industrial electricity tariff.",
+  "location.coloRackInfo": "Rack: {slots} slots, {watt} W, {price}/mo",
+  "location.racks": "Racks",
+  "location.rack": "42U rack",
+  "location.rackCount": "Rented: {count}",
+  "location.rackTotal": "Now: {slots} slots, {watt} W",
+  "location.buyRack": "Rent a rack ({price}/mo)",
+  "location.rackHint": "Each rack adds slots and power; the rent grows the monthly bill.",
+  "toast.rackBought": "Rack rented ({price}).",
   "feed.locationMoved": "Move complete: servers in their new slots",
   "feed.upsBought": "UPS purchased",
   "feed.stabilizerBought": "Stabilizer purchased",
@@ -751,5 +764,6 @@
   "services.name.managedDb": "Managed DBs",
   "services.name.objectStorage": "Object storage",
   "services.name.cdn": "CDN",
-  "services.name.gpuCloud": "GPU cloud"
+  "services.name.gpuCloud": "GPU cloud",
+  "services.name.colocation": "Colocation 1U"
 }

@@ -27,6 +27,7 @@ import {
   setInternetPlan as applySetInternetPlan,
   setServiceLimit as applySetServiceLimit,
   moveLocation as applyMoveLocation,
+  buyRack as applyBuyRack,
   setServicePrice as applySetServicePrice,
   toggleService as applyToggleService,
   setPaused,
@@ -153,6 +154,7 @@ interface GameStore {
   buyUps: () => void;
   buyStabilizer: () => void;
   moveLocation: (locationId: string) => void;
+  buyRack: () => void;
   hireStaff: (roleId: string) => void;
   fireStaff: (employeeId: number) => void;
   startResearch: (id: string) => void;
@@ -638,6 +640,19 @@ export const useGameStore = create<GameStore>((set, get) => {
       }
       set({ game: result.state, dirty: true });
       notify("toast.locationMoved", undefined, "info");
+    },
+
+    buyRack: () => {
+      const { settings } = get();
+      const result = applyBuyRack(get().game);
+      if (!result.ok) {
+        notifyLocationFailure(result.failure);
+        return;
+      }
+      set({ game: result.state, dirty: true });
+      notify("toast.rackBought", {
+        price: formatMoney(result.cost, settings.game.language, settings.game.numberFormat),
+      });
     },
 
     hireStaff: (roleId) => {

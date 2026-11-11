@@ -375,6 +375,19 @@ export interface StabilizerSpec {
 export interface MovingSpec {
   price: number;
   downtimeHours: number;
+  /** Переезд из гаража в colo: дороже и дольше (48 ч). */
+  toColo: MovingSpec;
+}
+
+export interface RackSpec {
+  /** Аренда стойки в colo, $/мес. */
+  rentPerMonth: number;
+  /** Слотов (U) на стойку. */
+  slots: number;
+  /** Питание на стойку, Вт. */
+  powerW: number;
+  /** Максимум стоек в зале (DESIGN.md §4.1: 10–40 стоек). */
+  maxRacks: number;
 }
 
 export interface LocationDefinition {
@@ -398,6 +411,7 @@ export interface LocationFile {
   ups: UpsSpec;
   stabilizer: StabilizerSpec;
   moving: MovingSpec;
+  rack: RackSpec;
   cooling: CoolingOption[];
   locations: LocationDefinition[];
 }
@@ -501,6 +515,29 @@ export function validateLocation(data: LocationFile): string[] {
     if (!(option.noiseDb >= 0 && option.noiseDb <= 80)) errors.push(`${prefix}.noiseDb: ожидается 0…80`);
   }
 
+  const rack = data.rack;
+  if (!(rack.rentPerMonth >= 50 && rack.rentPerMonth <= 2000)) {
+    errors.push("rack.rentPerMonth: ожидается 50…2000");
+  }
+  if (!Number.isInteger(rack.slots) || rack.slots < 1 || rack.slots > 48) {
+    errors.push("rack.slots: ожидается целое 1…48");
+  }
+  if (!(rack.powerW >= 500) || rack.powerW > 50_000) {
+    errors.push("rack.powerW: ожидается 500…50 000");
+  }
+  if (!Number.isInteger(rack.maxRacks) || rack.maxRacks < 1 || rack.maxRacks > 100) {
+    errors.push("rack.maxRacks: ожидается целое 1…100");
+  }
+  if (!(data.moving.toColo.price > data.moving.price)) {
+    errors.push("moving.toColo.price: должен быть дороже обычного переезда");
+  }
+  if (
+    !Number.isInteger(data.moving.toColo.downtimeHours) ||
+    data.moving.toColo.downtimeHours <= data.moving.downtimeHours
+  ) {
+    errors.push("moving.toColo.downtimeHours: должен быть длиннее обычного");
+  }
+
   const planIds = new Set(data.locations.flatMap((definition) => definition.internetPlans));
   for (const planId of planIds) {
     if (!economy.internet.plans.some((plan) => plan.id === planId)) {
@@ -516,11 +553,14 @@ export function validateLocation(data: LocationFile): string[] {
   for (const definition of data.locations) {
     const prefix = `locations.${definition.id}`;
     if (!LOCATION_KINDS.includes(definition.id)) errors.push(`${prefix}.id: неизвестная локация`);
-    if (!Number.isInteger(definition.slots) || definition.slots < 1 || definition.slots > 400) {
-      errors.push(`${prefix}.slots: ожидается целое 1…400`);
+    // colo: слоты растут от арендованных стоек, базовое значение 0.
+    const slotsMin = definition.id === "colo" ? 0 : 1;
+    if (!Number.isInteger(definition.slots) || definition.slots < slotsMin || definition.slots > 400) {
+      errors.push(`${prefix}.slots: ожидается целое ${slotsMin}…400`);
     }
-    if (!(definition.powerCapacityW > 0) || definition.powerCapacityW > 5_000_000) {
-      errors.push(`${prefix}.powerCapacityW: ожидается 0…5 000 000 Вт`);
+    const powerMin = definition.id === "colo" ? 0 : 1;
+    if (!(definition.powerCapacityW >= powerMin) || definition.powerCapacityW > 5_000_000) {
+      errors.push(`${prefix}.powerCapacityW: ожидается ${powerMin}…5 000 000 Вт`);
     }
     if (!(definition.rentPerMonth >= 0)) errors.push(`${prefix}.rentPerMonth: должно быть ≥ 0`);
     if (!Array.isArray(definition.internetPlans) || definition.internetPlans.length === 0) {
@@ -549,7 +589,8 @@ export type ServiceId =
   | "managedDb"
   | "objectStorage"
   | "cdn"
-  | "gpuCloud";
+  | "gpuCloud"
+  | "colocation";
 
 export const SERVICE_IDS: readonly ServiceId[] = [
   "landing",
@@ -561,6 +602,7 @@ export const SERVICE_IDS: readonly ServiceId[] = [
   "objectStorage",
   "cdn",
   "gpuCloud",
+  "colocation",
 ];
 
 /** Услуги, доступные без исследований (стартовый набор эпохи 1). */
@@ -575,6 +617,9 @@ export const SERVICE_RESEARCH: Readonly<Record<string, string>> = {
   cdn: "cdn",
   gpuCloud: "gpuAi",
 };
+
+/** Услуга «Колокейшн 1U» открывается не исследованием, а переездом в colo (этап 12). */
+export const COLOCATION_SERVICE_ID: ServiceId = "colocation";
 
 export interface ServiceDefinition {
   id: ServiceId;

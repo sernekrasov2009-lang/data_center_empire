@@ -229,6 +229,8 @@ export interface HardwareState {
 export interface LocationState {
   /** id локации из location.json. */
   id: string;
+  /** Арендованные стойки в colo (этап 12): слоты/мощность/аренда растут от них. */
+  ownedRacks: number;
   coolingId: string;
   /** Купленные варианты охлаждения: переключение между ними бесплатно. */
   ownedCooling: string[];

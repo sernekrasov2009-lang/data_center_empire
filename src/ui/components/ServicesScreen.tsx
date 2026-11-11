@@ -14,6 +14,7 @@ const SERVICE_ORDER: readonly ServiceId[] = [
   "objectStorage",
   "cdn",
   "gpuCloud",
+  "colocation",
 ];
 
 export function ServicesScreen(): React.JSX.Element {

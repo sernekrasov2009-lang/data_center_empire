@@ -1,4 +1,5 @@
 import {
+  COLOCATION_SERVICE_ID,
   economy as economyData,
   getCooling,
   getLocationDefinition,
@@ -25,7 +26,11 @@ export type LocationErrorCode =
   | "locationNotFound"
   | "locationNotAdjacent"
   | "alreadyMoving"
-  | "alreadyOwned";
+  | "alreadyOwned"
+  | "racksMax"
+  | "racksNotHere"
+  | "racksMin"
+  | "racksBusy";
 
 export interface LocationFailure {
   code: LocationErrorCode;
@@ -47,6 +52,29 @@ export interface LocationEvent {
   kind: LocationEventKind;
   amount?: number;
   ref?: string;
+}
+
+/* ── Colo: масштабируемые слоты/мощность/аренда (этап 12) ─────────── */
+
+/** Число слотов локации: в colo — по 12 на арендованную стойку. */
+export function locationSlots(state: GameState): number {
+  const definition = getLocation(state);
+  if (definition.id !== "colo") return definition.slots;
+  return state.location.ownedRacks * locationData.rack.slots;
+}
+
+/** Ёмкость автомата, Вт: в colo — по 5 кВт на стойку. */
+export function locationPowerCapacityW(state: GameState): number {
+  const definition = getLocation(state);
+  if (definition.id !== "colo") return definition.powerCapacityW;
+  return state.location.ownedRacks * locationData.rack.powerW;
+}
+
+/** Аренда локации, $/мес: в colo — по $500 за стойку. */
+export function locationRentPerMonth(state: GameState): number {
+  const definition = getLocation(state);
+  if (definition.id !== "colo") return definition.rentPerMonth;
+  return state.location.ownedRacks * locationData.rack.rentPerMonth;
 }
 
 function round1(value: number): number {
@@ -108,6 +136,7 @@ export function createLocation(loadW = economyData.start.itLoadW): LocationState
   const outsideTempC = outsideTempFor(0);
   return {
     id: definition.id,
+    ownedRacks: 0,
     coolingId: definition.defaultCoolingId,
     ownedCooling: [definition.defaultCoolingId],
     internetPlanId: definition.defaultInternetPlanId,
@@ -196,13 +225,13 @@ export function currentNoiseDb(state: GameState): number {
 
 /** Первый свободный слот или null, если места нет. */
 export function firstFreeSlot(state: GameState): number | null {
-  const definition = getLocation(state);
+  const slots = locationSlots(state);
   const used = new Set(
     state.hardware.builds
       .filter((build) => build.slot !== null)
       .map((build) => build.slot as number),
   );
-  for (let slot = 0; slot < definition.slots; slot += 1) {
+  for (let slot = 0; slot < slots; slot += 1) {
     if (!used.has(slot)) return slot;
   }
   return null;
@@ -230,9 +259,9 @@ export function setBuildSlot(
   if (!build) return { ok: false, failure: { code: "buildNotFound" } };
   if (build.status !== "ready") return { ok: false, failure: { code: "buildNotReady" } };
 
-  const definition = getLocation(state);
-  if (slot !== null && (!Number.isInteger(slot) || slot < 0 || slot >= definition.slots)) {
-    return { ok: false, failure: { code: "slotInvalid", params: { slots: definition.slots } } };
+  const slots = locationSlots(state);
+  if (slot !== null && (!Number.isInteger(slot) || slot < 0 || slot >= slots)) {
+    return { ok: false, failure: { code: "slotInvalid", params: { slots } } };
   }
 
   const next = cloneState(state);
@@ -365,7 +394,9 @@ export function moveLocation(
     return { ok: false, failure: { code: "alreadyMoving" } };
   }
 
-  const cost = locationData.moving.price;
+  // Переезд в colo дороже и дольше (DESIGN.md §4.1: зал, 48 ч на перекладку).
+  const movingSpec = definition.id === "colo" ? locationData.moving.toColo : locationData.moving;
+  const cost = movingSpec.price;
   if (state.money < cost) {
     return { ok: false, failure: { code: "notEnoughMoney", params: { total: cost } } };
   }
@@ -377,13 +408,69 @@ export function moveLocation(
   next.location.ownedCooling = [definition.defaultCoolingId];
   next.location.internetPlanId = definition.defaultInternetPlanId;
   next.location.powerOff = "moving";
-  next.location.movingUntilHour = next.time.hour + locationData.moving.downtimeHours;
+  next.location.movingUntilHour = next.time.hour + movingSpec.downtimeHours;
   next.location.insulated = false;
   next.location.irritation = 0;
   next.location.overloadHours = 0;
+  // В colo стартуем с одной стойкой (12 слотов) и новым охлаждением (CRAC).
+  next.location.ownedRacks = definition.id === "colo" ? 1 : 0;
   // Серверы снимаются со старых слотов: tickLocation расставит по новым.
   next.hardware.builds = next.hardware.builds.map((build) => ({ ...build, slot: null }));
   return { ok: true, state: next, cost };
+}
+
+/**
+ * Аренда ещё одной стойки в colo (этап 12): +12 слотов, +5 кВт, +$500/мес.
+ * Деньги списываются сразу как депозит месяца; аренда — в monthly rent.
+ */
+export function buyRack(state: GameState): LocationResult<{ state: GameState; cost: number }> {
+  if (state.location.id !== "colo") {
+    return { ok: false, failure: { code: "racksNotHere" } };
+  }
+  if (state.location.ownedRacks >= locationData.rack.maxRacks) {
+    return { ok: false, failure: { code: "racksMax", params: { max: locationData.rack.maxRacks } } };
+  }
+  const cost = locationData.rack.rentPerMonth;
+  if (state.money < cost) {
+    return { ok: false, failure: { code: "notEnoughMoney", params: { total: cost } } };
+  }
+
+  const next = cloneState(state);
+  next.money = roundMoney(next.money - cost);
+  next.location.ownedRacks += 1;
+  return { ok: true, state: next, cost };
+}
+
+/**
+ * Возврат стойки арендодателю (этап 12): слоты и мощность убираются,
+ * месячная аренда падает. Нельзя вернуть последнюю стойку (racksMin) и
+ * стойку, в слотах которой стоят серверы (racksBusy).
+ */
+export function returnRack(state: GameState): LocationResult<{ state: GameState }> {
+  if (state.location.id !== "colo") {
+    return { ok: false, failure: { code: "racksNotHere" } };
+  }
+  if (state.location.ownedRacks <= 1) {
+    return { ok: false, failure: { code: "racksMin" } };
+  }
+  // Стойки «сплошные»: считаем занятые слоты от конца.
+  const slots = locationSlots(state);
+  const used = new Set(
+    state.hardware.builds
+      .filter((build) => build.status === "ready" && build.slot !== null)
+      .map((build) => build.slot as number),
+  );
+  const rackSlots = locationData.rack.slots;
+  const lastRackFirst = slots - rackSlots;
+  for (let slot = lastRackFirst; slot < slots; slot += 1) {
+    if (used.has(slot)) {
+      return { ok: false, failure: { code: "racksBusy", params: { slot } } };
+    }
+  }
+
+  const next = cloneState(state);
+  next.location.ownedRacks -= 1;
+  return { ok: true, state: next };
 }
 
 /** Ручной сброс автомата после перегруза. */
@@ -425,7 +512,7 @@ export function tickLocation(state: GameState): { state: GameState; events: Loca
   };
   const events: LocationEvent[] = [];
   const hour = next.time.hour;
-  const definition = getLocation(next);
+  const capacity = locationPowerCapacityW(next);
   const climate = locationData.climate;
   const noiseSpec = locationData.noise;
 
@@ -441,13 +528,26 @@ export function tickLocation(state: GameState): { state: GameState; events: Loca
       for (const build of next.hardware.builds) {
         if (build.status === "ready") assignFreeSlot(next, build);
       }
+      // Колокейшн 1U доступен только из зала colo (этап 12).
+      if (
+        next.location.id === "colo" &&
+        !next.services.services.some((service) => service.id === COLOCATION_SERVICE_ID)
+      ) {
+        next.services = {
+          ...next.services,
+          services: [
+            ...next.services.services,
+            { id: COLOCATION_SERVICE_ID, priceMult: 1, enabled: false, clientLimit: 0 },
+          ],
+        };
+      }
       events.push({ kind: "locationMoved" });
     }
     return { state: next, events };
   }
 
   if (next.location.powerOff === "none") {
-    if (load > definition.powerCapacityW) {
+    if (load > capacity) {
       next.location.overloadHours += 1;
       if (next.location.overloadHours > locationData.breakerGraceHours) {
         next.location.powerOff = "breaker";
@@ -468,34 +568,42 @@ export function tickLocation(state: GameState): { state: GameState; events: Loca
     }
   }
 
-  const noise = currentNoiseDb(next);
-  const limit = isNight(hour) ? noiseSpec.nightLimitDb : noiseSpec.dayLimitDb;
+  // Шум соседей — только домашние локации (этап 12): в арендованном colo
+  // шумит весь зал целиком, отдельных соседей нет — жалобы и штрафы
+  // не начисляются.
+  const homeNoise = next.location.id === "home" || next.location.id === "garage";
+  if (homeNoise) {
+    const noise = currentNoiseDb(next);
+    const limit = isNight(hour) ? noiseSpec.nightLimitDb : noiseSpec.dayLimitDb;
 
-  if (isNight(hour) && noise > limit) {
-    next.location.irritation += (noise - limit) * noiseSpec.irritationPerDbHour;
+    if (isNight(hour) && noise > limit) {
+      next.location.irritation += (noise - limit) * noiseSpec.irritationPerDbHour;
+    } else {
+      next.location.irritation -= noiseSpec.irritationDecayPerHour;
+    }
+    next.location.irritation = Math.min(100, Math.max(0, next.location.irritation));
+
+    if (next.location.irritation >= noiseSpec.shutdownAt && next.location.powerOff === "none") {
+      next.location.powerOff = "neighbors";
+      events.push({ kind: "neighborsShutdown", amount: round1(next.location.irritation) });
+      next.location.irritation = noiseSpec.fineAt;
+    } else if (
+      next.location.irritation >= noiseSpec.fineAt &&
+      hour - next.location.lastFineHour >= noiseSpec.minComplaintGapHours
+    ) {
+      next.location.lastFineHour = hour;
+      next.money = roundMoney(next.money - noiseSpec.fineAmount);
+      events.push({ kind: "noiseFine", amount: noiseSpec.fineAmount });
+      next.location.irritation = Math.max(0, next.location.irritation - noiseSpec.fineAt / 2);
+    } else if (
+      next.location.irritation >= noiseSpec.complaintAt &&
+      hour - next.location.lastComplaintHour >= noiseSpec.minComplaintGapHours
+    ) {
+      next.location.lastComplaintHour = hour;
+      events.push({ kind: "noiseComplaint", amount: noise });
+    }
   } else {
-    next.location.irritation -= noiseSpec.irritationDecayPerHour;
-  }
-  next.location.irritation = Math.min(100, Math.max(0, next.location.irritation));
-
-  if (next.location.irritation >= noiseSpec.shutdownAt && next.location.powerOff === "none") {
-    next.location.powerOff = "neighbors";
-    events.push({ kind: "neighborsShutdown", amount: round1(next.location.irritation) });
-    next.location.irritation = noiseSpec.fineAt;
-  } else if (
-    next.location.irritation >= noiseSpec.fineAt &&
-    hour - next.location.lastFineHour >= noiseSpec.minComplaintGapHours
-  ) {
-    next.location.lastFineHour = hour;
-    next.money = roundMoney(next.money - noiseSpec.fineAmount);
-    events.push({ kind: "noiseFine", amount: noiseSpec.fineAmount });
-    next.location.irritation = Math.max(0, next.location.irritation - noiseSpec.fineAt / 2);
-  } else if (
-    next.location.irritation >= noiseSpec.complaintAt &&
-    hour - next.location.lastComplaintHour >= noiseSpec.minComplaintGapHours
-  ) {
-    next.location.lastComplaintHour = hour;
-    events.push({ kind: "noiseComplaint", amount: noise });
+    next.location.irritation = 0;
   }
 
   return { state: next, events };

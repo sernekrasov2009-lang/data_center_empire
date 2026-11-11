@@ -1,5 +1,5 @@
 import { economy as economyData, getDifficulty, getElectricityTariff, getInternetPlan } from "../data";
-import { getLocation, totalPowerDrawW } from "./location";
+import { getLocation, locationRentPerMonth, totalPowerDrawW } from "./location";
 import { monthlyPayroll } from "./staff";
 import { accrueRevenueHour, closeMonthRevenue, projectedMonthlyRevenue } from "./services";
 import { nextFloat } from "./core/rng";
@@ -24,6 +24,14 @@ export function electricityPricePerKwh(priceMult: number): number {
   return getElectricityTariff(economyData.start.electricityTariffId).pricePerKwh * priceMult;
 }
 
+/** Тариф локации: дом — бытовой, гараж — коммерческий, colo — промышленный. */
+export function locationElectricityTariffId(state: GameState): string {
+  const id = getLocation(state).id;
+  if (id === "home") return "home";
+  if (id === "colo" || id === "datacenter") return "industrial";
+  return "commercial";
+}
+
 /**
  * Стоимость электричества за один игровой час: ИТ-нагрузка × PUE локации
  * плюс явное потребление охлаждения.
@@ -33,7 +41,8 @@ export function hourlyElectricityCost(
   priceMult = state.economy.electricityPriceMult,
 ): number {
   const eventMult = state.world.electricityPriceEventMult;
-  return (totalPowerDrawW(state) / 1000) * electricityPricePerKwh(priceMult) * eventMult;
+  const price = getElectricityTariff(locationElectricityTariffId(state)).pricePerKwh * priceMult;
+  return (totalPowerDrawW(state) / 1000) * price * eventMult;
 }
 
 /** Полный месяц электричества при текущей цене (для прогноза и подсказок). */
@@ -51,7 +60,7 @@ export function fixedMonthlyCosts(
   const plan = getInternetPlan(state.location.internetPlanId);
   return {
     internet: plan.pricePerMonth,
-    rent: getLocation(state).rentPerMonth,
+    rent: locationRentPerMonth(state),
     staff: monthlyPayroll(state),
   };
 }

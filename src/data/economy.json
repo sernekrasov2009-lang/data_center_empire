@@ -21,7 +21,8 @@
       { "id": "home-100", "speedMbit": 100, "pricePerMonth": 20 },
       { "id": "home-300", "speedMbit": 300, "pricePerMonth": 35 },
       { "id": "garage-500", "speedMbit": 500, "pricePerMonth": 60 },
-      { "id": "garage-1000", "speedMbit": 1000, "pricePerMonth": 90 }
+      { "id": "garage-1000", "speedMbit": 1000, "pricePerMonth": 90 },
+      { "id": "colo-10000", "speedMbit": 10000, "pricePerMonth": 400 }
     ],
     "defaultPlanId": "home-100"
   },

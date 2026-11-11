@@ -410,8 +410,15 @@ function asLocation(value: unknown): LocationState {
       : "none";
 
   const minGap = locationData.noise.minComplaintGapHours;
+  // Стойки (этап 12): только в colo; при наличии серверов — минимум одна.
+  const maxRacks = locationData.rack.maxRacks;
+  const ownedRacks =
+    id === "colo"
+      ? Math.min(maxRacks, Math.max(0, Math.floor(asNumber(value.ownedRacks, 1))))
+      : 0;
   return {
     id,
+    ownedRacks,
     coolingId,
     ownedCooling: owned,
     internetPlanId,

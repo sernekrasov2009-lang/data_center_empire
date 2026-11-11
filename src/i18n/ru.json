@@ -645,6 +645,19 @@
   "location.error.locationNotAdjacent": "Переезд возможен только в следующую локацию.",
   "location.error.alreadyMoving": "Переезд уже идёт.",
   "location.error.alreadyOwned": "Уже куплено.",
+  "location.error.racksMax": "Зал заполнен: больше стоек нет.",
+  "location.error.racksNotHere": "Стойки арендуются только в colo.",
+  "location.kind.colo": "Арендованный зал (colo)",
+  "location.moveToColo": "Переехать в colo",
+  "location.coloDesc": "Арендованный зал: стойки по 42U, PUE 1,5, промышленный тариф электричества.",
+  "location.coloRackInfo": "Стойка: {slots} слотов, {watt} Вт, {price}/мес",
+  "location.racks": "Стойки",
+  "location.rack": "Стойка 42U",
+  "location.rackCount": "Арендовано: {count}",
+  "location.rackTotal": "Сейчас: {slots} слотов, {watt} Вт",
+  "location.buyRack": "Арендовать стойку ({price}/мес)",
+  "location.rackHint": "Каждая стойка добавляет слоты и питание; аренда увеличивает месячный счёт.",
+  "toast.rackBought": "Стойка арендована ({price}).",
   "feed.locationMoved": "Переезд завершён: серверы на новых местах",
   "feed.upsBought": "Куплен ИБП",
   "feed.stabilizerBought": "Куплен стабилизатор",
@@ -751,5 +764,6 @@
   "services.name.managedDb": "Управляемые БД",
   "services.name.objectStorage": "Объектное хранилище",
   "services.name.cdn": "CDN",
-  "services.name.gpuCloud": "GPU-облако"
+  "services.name.gpuCloud": "GPU-облако",
+  "services.name.colocation": "Колокейшн 1U"
 }

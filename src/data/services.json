@@ -101,6 +101,16 @@
       "pricePerMonth": 500,
       "slaPercent": 99.5,
       "baseDemandPerDay": 0.05
+    },
+    {
+      "id": "colocation",
+      "coresPerClient": 0.01,
+      "ramGbPerClient": 0.1,
+      "storageGbPerClient": 1,
+      "mbitPerClient": 5,
+      "pricePerMonth": 35,
+      "slaPercent": 99.5,
+      "baseDemandPerDay": 0.6
     }
   ]
 }
