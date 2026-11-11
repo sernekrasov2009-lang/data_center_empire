@@ -4,7 +4,17 @@ import { activeBuilds, buildUsage, clientsByService, usedMbit } from "../../sim"
 import { useGameStore } from "../../state/store";
 import { formatInt, formatMoney } from "../format";
 
-const SERVICE_ORDER: readonly ServiceId[] = ["landing", "cms", "chatbot"];
+const SERVICE_ORDER: readonly ServiceId[] = [
+  "landing",
+  "cms",
+  "chatbot",
+  "vps",
+  "gameServers",
+  "managedDb",
+  "objectStorage",
+  "cdn",
+  "gpuCloud",
+];
 
 export function ServicesScreen(): React.JSX.Element {
   const t = useT();

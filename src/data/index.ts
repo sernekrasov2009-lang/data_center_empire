@@ -7,6 +7,7 @@ import rawReputation from "./reputation.json";
 import rawServices from "./services.json";
 import rawEvents from "./events.json";
 import rawStaff from "./staff.json";
+import rawResearch from "./research.json";
 
 /** Скорости игры. 0 — пауза (DESIGN.md, разд. 1). */
 export type Speed = 0 | 1 | 5 | 20 | 60;
@@ -539,9 +540,41 @@ export function validateLocation(data: LocationFile): string[] {
 /* ── Услуги и клиенты (DESIGN.md, разд. 5) ───────────────────────── */
 
 /** Ключ услуги; пока три стартовых, расширится исследованиями. */
-export type ServiceId = "landing" | "cms" | "chatbot";
+export type ServiceId =
+  | "landing"
+  | "cms"
+  | "chatbot"
+  | "vps"
+  | "gameServers"
+  | "managedDb"
+  | "objectStorage"
+  | "cdn"
+  | "gpuCloud";
 
-export const SERVICE_IDS: readonly ServiceId[] = ["landing", "cms", "chatbot"];
+export const SERVICE_IDS: readonly ServiceId[] = [
+  "landing",
+  "cms",
+  "chatbot",
+  "vps",
+  "gameServers",
+  "managedDb",
+  "objectStorage",
+  "cdn",
+  "gpuCloud",
+];
+
+/** Услуги, доступные без исследований (стартовый набор эпохи 1). */
+export const STARTER_SERVICE_IDS: readonly ServiceId[] = ["landing", "cms", "chatbot"];
+
+/** Карта: услуга → исследование, которое её открывает. */
+export const SERVICE_RESEARCH: Readonly<Record<string, string>> = {
+  vps: "virtualization",
+  gameServers: "gameHosting",
+  managedDb: "replication",
+  objectStorage: "storage",
+  cdn: "cdn",
+  gpuCloud: "gpuAi",
+};
 
 export interface ServiceDefinition {
   id: ServiceId;
@@ -702,6 +735,129 @@ export interface StaffFile {
 }
 
 export const staffData = rawStaff as StaffFile;
+
+/* ── Исследования (этап 11, DESIGN.md §9) ─────────────────────────── */
+
+export type ResearchId =
+  | "virtualization"
+  | "gameHosting"
+  | "raidBackups"
+  | "monitoring"
+  | "replication"
+  | "ddosProtection"
+  | "coldAisles"
+  | "storage"
+  | "orchestration"
+  | "cdn"
+  | "liquidCooling"
+  | "gpuAi";
+
+export const RESEARCH_IDS: readonly ResearchId[] = [
+  "virtualization",
+  "gameHosting",
+  "raidBackups",
+  "monitoring",
+  "replication",
+  "ddosProtection",
+  "coldAisles",
+  "storage",
+  "orchestration",
+  "cdn",
+  "liquidCooling",
+  "gpuAi",
+];
+
+export interface ResearchProject {
+  id: ResearchId;
+  /** Стоимость старта, $. */
+  cost: number;
+  /** Длительность в игровых днях. */
+  days: number;
+  /** Id исследований, которые должны быть завершены. */
+  prerequisites: ResearchId[];
+  /** Услуга, которую исследование разблокирует. */
+  unlocksService?: ServiceId;
+  /** +доля к плотности размещения клиентов. */
+  densityBonus?: number;
+  /** Доля, на которую падает длительность DDoS. */
+  ddosReduction?: number;
+  /** +доля к эффективности охлаждения. */
+  coolingBonus?: number;
+  /** Абсолютное снижение PUE. */
+  pueReduction?: number;
+  /** Доля снижения ущерба от взлома клиента. */
+  hackMitigation?: number;
+  /** Ускорение ремонта деталей, доля. */
+  repairSpeedBonus?: number;
+}
+
+export interface ResearchFile {
+  version: number;
+  rules: {
+    /** Сколько исследований можно вести параллельно. */
+    maxActive: number;
+    /** Доля возврата при отмене. */
+    cancelRefundMult: number;
+  };
+  projects: ResearchProject[];
+}
+
+export const researchData = rawResearch as ResearchFile;
+
+export function getResearch(id: ResearchId): ResearchProject {
+  const project = researchData.projects.find((candidate) => candidate.id === id);
+  if (!project) throw new Error(`Неизвестное исследование: ${id}`);
+  return project;
+}
+
+/** Проверка research.json: id, цены, длительности, пререквизиты и бонусы. */
+export function validateResearch(data: ResearchFile): string[] {
+  const errors: string[] = [];
+
+  if (!Number.isInteger(data.version) || data.version < 1) {
+    errors.push("version: ожидается целое число ≥ 1");
+  }
+  if (!Number.isInteger(data.rules.maxActive) || data.rules.maxActive < 1 || data.rules.maxActive > 5) {
+    errors.push("rules.maxActive: ожидается 1…5");
+  }
+  if (!(data.rules.cancelRefundMult >= 0 && data.rules.cancelRefundMult <= 1)) {
+    errors.push("rules.cancelRefundMult: ожидается 0…1");
+  }
+
+  const ids = data.projects.map((project) => project.id);
+  if (new Set(ids).size !== ids.length) {
+    errors.push("projects: id должны быть уникальны");
+  }
+  for (const project of data.projects) {
+    const prefix = `projects.${project.id}`;
+    if (!RESEARCH_IDS.includes(project.id)) {
+      errors.push(`${prefix}.id: неизвестное исследование`);
+      continue;
+    }
+    if (!(project.cost >= 100 && project.cost <= 5_000_000)) {
+      errors.push(`${prefix}.cost: ожидается 100…5 000 000`);
+    }
+    if (!Number.isInteger(project.days) || project.days < 1 || project.days > 365) {
+      errors.push(`${prefix}.days: ожидается целое 1…365`);
+    }
+    for (const prerequisite of project.prerequisites) {
+      if (!RESEARCH_IDS.includes(prerequisite)) {
+        errors.push(`${prefix}.prerequisites: неизвестный пререквизит ${prerequisite}`);
+      }
+    }
+    if (project.unlocksService !== undefined && !SERVICE_IDS.includes(project.unlocksService)) {
+      errors.push(`${prefix}.unlocksService: неизвестная услуга`);
+    }
+    for (const [key, value] of Object.entries(project)) {
+      if (!key.endsWith("Bonus") && !key.endsWith("Reduction") && !key.endsWith("Mitigation")) continue;
+      if (typeof value === "number" && !(value >= 0 && value <= 1)) {
+        errors.push(`${prefix}.${key}: ожидается 0…1`);
+      }
+    }
+  }
+
+  return errors;
+}
 
 /** Проверка staff.json: роли, зарплаты, прогрессия уровней. */
 export function validateStaff(data: StaffFile): string[] {

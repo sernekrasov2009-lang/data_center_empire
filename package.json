@@ -1,7 +1,7 @@
 {
   "name": "uptime-empire",
   "productName": "Uptime Empire",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Uptime Empire — экономический симулятор админа ЦОД",
   "private": true,
   "main": "dist-electron/electron/main.js",

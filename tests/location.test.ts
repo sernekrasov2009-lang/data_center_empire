@@ -114,12 +114,12 @@ describe("климат и охлаждение", () => {
   });
 
   it("считает комнатную температуру по формуле T + P/C", () => {
-    expect(roomTempFor(20, 100, "window")).toBeCloseTo(24, 5);
-    expect(roomTempFor(20, 300, "split")).toBeCloseTo(22, 5);
+    expect(roomTempFor(null, 20, 100, "window")).toBeCloseTo(24, 5);
+    expect(roomTempFor(null, 20, 300, "split")).toBeCloseTo(22, 5);
   });
 
   it("не опускает комнату ниже отопительного минимума", () => {
-    expect(roomTempFor(-40, 0, "window")).toBe(locationData.climate.minRoomTempC);
+    expect(roomTempFor(null, -40, 0, "window")).toBe(locationData.climate.minRoomTempC);
   });
 
   it("мощное охлаждение имеет большую проводимость", () => {

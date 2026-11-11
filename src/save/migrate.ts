@@ -8,7 +8,10 @@ import {
   locationData,
   servicesData,
   staffData,
+  researchData,
   STAFF_ROLE_IDS,
+  RESEARCH_IDS,
+  type ResearchId,
   type StaffRoleId,
   type ServiceId,
   type DifficultyId,
@@ -24,6 +27,7 @@ import {
   createRng,
   createServices,
   createStaff,
+  createResearch,
   cloneReputation,
   createWorldEvents,
   refreshUsedMarket,
@@ -31,6 +35,8 @@ import {
   type ServicesState,
   type StaffMember,
   type StaffState,
+  type ActiveResearch,
+  type ResearchState,
 } from "../sim";
 import type {
   BuildPart,
@@ -575,6 +581,40 @@ function asStaff(value: unknown): StaffState {
   };
 }
 
+/** Санитизация блока research (этап 11). */
+function asResearch(value: unknown): ResearchState {
+  if (!isRecord(value)) return createResearch();
+
+  const completed: ResearchId[] = [];
+  if (Array.isArray(value.completed)) {
+    for (const raw of value.completed) {
+      if (typeof raw === "string" && RESEARCH_IDS.includes(raw as ResearchId)) {
+        completed.push(raw as ResearchId);
+      }
+    }
+  }
+
+  const active: ActiveResearch[] = [];
+  if (Array.isArray(value.active)) {
+    for (const raw of value.active) {
+      if (!isRecord(raw)) continue;
+      const id = typeof raw.id === "string" ? raw.id : "";
+      if (!RESEARCH_IDS.includes(id as ResearchId)) continue;
+      if (completed.includes(id as ResearchId)) continue;
+      active.push({
+        id: id as ResearchId,
+        startedAtHour: Math.max(0, Math.floor(asNumber(raw.startedAtHour, 0))),
+        completesAtHour: Math.max(0, Math.floor(asNumber(raw.completesAtHour, 0))),
+      });
+    }
+  }
+
+  // Не больше maxActive активных.
+  const maxActive = researchData.rules.maxActive;
+  const trimmed = active.slice(0, maxActive);
+  return { completed, active: trimmed, nextActiveId: Math.max(1, Math.floor(asNumber(value.nextActiveId, 1))) };
+}
+
 /**
  * Приводит слоты сборок в согласованный вид: один сервер — один слот,
  * лишние слоты снимаются, готовые серверы автоматически занимают свободные места.
@@ -678,6 +718,7 @@ export function migrateGame(raw: unknown): GameState {
     reputation: asReputation(raw.reputation),
     world: createWorldEvents(),
     staff: asStaff(raw.staff),
+    research: asResearch(raw.research),
     gameOver: asGameOver(raw.gameOver),
     stats: { ticks: Math.max(0, Math.floor(isRecord(raw.stats) ? asNumber(raw.stats.ticks, 0) : 0)) },
     events: asEvents(raw.events),

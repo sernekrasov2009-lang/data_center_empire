@@ -5,6 +5,7 @@ import type {
   ServiceId,
   Speed,
   StaffRoleId,
+  ResearchId,
 } from "../data";
 
 export type { Speed };
@@ -65,7 +66,10 @@ export type SimEventKind =
   | "spikePrevented"
   | "staffHired"
   | "staffFired"
-  | "staffPromoted";
+  | "staffPromoted"
+  | "researchStarted"
+  | "researchCompleted"
+  | "researchCancelled";
 
 export interface SimEvent {
   id: number;
@@ -359,6 +363,20 @@ export interface StaffState {
   nextEmployeeId: number;
 }
 
+export interface ActiveResearch {
+  id: ResearchId;
+  startedAtHour: number;
+  completesAtHour: number;
+}
+
+export interface ResearchState {
+  /** Завершённые исследования. */
+  completed: ResearchId[];
+  /** Идущие сейчас (не больше rules.maxActive). */
+  active: ActiveResearch[];
+  nextActiveId: number;
+}
+
 export interface GameState {
   version: number;
   seed: number;
@@ -374,6 +392,7 @@ export interface GameState {
   reputation: ReputationState;
   world: WorldEventsState;
   staff: StaffState;
+  research: ResearchState;
   /** Заполняется, когда игра закончена (банкротство). */
   gameOver: GameOverInfo | null;
   stats: GameStats;

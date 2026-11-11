@@ -4,6 +4,8 @@ import {
   findComponent,
   locationData,
   servicesData,
+  getResearch,
+  type ResearchId,
 } from "../data";
 import { buildStats, validateBuild } from "./components";
 import { placeNewOrder, previewNewOrder, startBuild } from "./hardware";
@@ -20,6 +22,7 @@ import {
   setCooling,
 } from "./location";
 import { hireStaff, staffCapByRevenue } from "./staff";
+import { researchAvailable, startResearch } from "./research";
 import type { GameState } from "./types";
 
 /**
@@ -203,17 +206,43 @@ export function botDay(state: GameState): BotDayResult {
   // 2.10 Персонал (этап 10): нанимаем по приоритету, пока месячная выручка
   // покрывает зарплаты (каждые $1200 выручки — один сотрудник).
   const staffCap = staffCapByRevenue(next);
+  const hireRevenue = next.economy.reports.at(-1)?.revenue ?? 0;
   if (next.staff.employees.length < staffCap) {
     const priority = ["support", "sales", "sysadmin", "network", "electrician", "security"];
     for (const roleId of priority) {
       if (next.staff.employees.some((employee) => employee.roleId === roleId)) continue;
       const role = staffData.roles.find((candidate) => candidate.id === roleId)!;
-      // Нанимаем только если взнос по карману и зарплата покрыта выручкой.
+      // Нанимаем, только если зарплата не больше 60% месячной выручки
+      // и взнос по карману (иначе счёт уходит в минус).
+      if (role.salaryPerMonth > hireRevenue * 0.6) continue;
       if (next.money < Math.round(role.salaryPerMonth * staffData.hiring.feeMult)) continue;
       const result = hireStaff(next, roleId);
       if (result.ok) {
         next = result.state;
         decisions.push({ kind: "wait", detail: `нанят ${role.id}, $${result.cost}` });
+      }
+      break;
+    }
+  }
+
+  // 2.11 Исследования (этап 11): по приоритету, после вехи $1000/мес и с запасом.
+  const researchPriority: ResearchId[] = [
+    "virtualization",
+    "raidBackups",
+    "monitoring",
+    "ddosProtection",
+  ];
+  const lastRevenue = next.economy.reports.at(-1)?.revenue ?? 0;
+  if (lastRevenue >= 1000) {
+    for (const id of researchPriority) {
+      if (!researchAvailable(next, id)) continue;
+      const project = getResearch(id);
+      // Запускаем, только если остаётся резерв в половину стоимости.
+      if (next.money < project.cost * 1.5) continue;
+      const result = startResearch(next, id);
+      if (result.ok) {
+        next = result.state;
+        decisions.push({ kind: "wait", detail: `исследование ${id}, $${result.cost}` });
       }
       break;
     }

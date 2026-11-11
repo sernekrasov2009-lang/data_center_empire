@@ -1,5 +1,6 @@
 import { eventsData, locationData } from "../data";
 import { effectStrength } from "./staff";
+import { researchBonuses } from "./research";
 import { chance, nextFloat, nextInt } from "./core/rng";
 import { HOURS_PER_MONTH } from "./core/time";
 import type { ActiveEventState, GameState, WorldEventsState } from "./types";
@@ -141,10 +142,11 @@ export function rollDailyEvents(state: GameState, month: number): WorldEvent[] {
     const ddosChance =
       eventsData.ddos.chancePerDay + reputationExcess * 100 * eventsData.ddos.reputationGrowthPerPoint;
     if (chance(state.rng, ddosChance)) {
-      // Сетевой инженер сокращает длительность атаки (этап 10).
+      // Сетевой инженер (этап 10) и DDoS-защита (этап 11) сокращают атаку.
       const netSpeed = 1 - effectStrength(state, "channelResilience");
+      const ddosSpeed = netSpeed * (1 - researchBonuses(state).ddosReduction);
       const rolled = nextInt(state.rng, eventsData.ddos.minHours, eventsData.ddos.maxHours);
-      const hours = Math.max(1, Math.round(rolled * netSpeed));
+      const hours = Math.max(1, Math.round(rolled * ddosSpeed));
       startEvent(state, "ddos", hours);
       events.push({ kind: "ddosStarted", amount: hours });
     }
@@ -168,15 +170,16 @@ export function rollDailyEvents(state: GameState, month: number): WorldEvent[] {
   }
 
   // Взлом клиента: репутационный удар.
-  // Безопасник снижает шанс взлома (этап 10).
+  // Безопасник (этап 10) снижает шанс, RAID/бэкапы (этап 11) смягчают удар.
   const hackChance =
     eventsData.clientHacked.chancePerDay * (1 - effectStrength(state, "hackProtection"));
   if (state.services.clients.length > 0 && chance(state.rng, hackChance)) {
+    const hit = eventsData.clientHacked.reputationHit * (1 - researchBonuses(state).hackMitigation);
     state.reputation.value = Math.max(
       0.2,
-      state.reputation.value - eventsData.clientHacked.reputationHit,
+      state.reputation.value - hit,
     );
-    events.push({ kind: "clientHacked", amount: eventsData.clientHacked.reputationHit });
+    events.push({ kind: "clientHacked", amount: hit });
   }
 
   // Скачок цены электричества: +30% на 1–3 месяца.

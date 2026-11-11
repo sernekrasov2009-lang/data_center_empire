@@ -9,6 +9,7 @@ export * from "./reputation";
 export * from "./world-events";
 export * from "./bot";
 export * from "./staff";
+export * from "./research";
 export { createRng, nextUint32, nextFloat, nextInt, chance, pick } from "./core/rng";
 export {
   HOURS_PER_DAY,

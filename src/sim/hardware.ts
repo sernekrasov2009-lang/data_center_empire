@@ -12,6 +12,7 @@ import {
 } from "./components";
 import { assignFreeSlot, serversRunning } from "./location";
 import { effectStrength } from "./staff";
+import { researchBonuses } from "./research";
 import type {
   GameState,
   HardwareBuild,
@@ -452,10 +453,11 @@ function repairHoursFor(state: GameState, componentId: string): { hours: number;
   const spareIndex = state.hardware.parts.findIndex((part) => part.componentId === componentId);
   if (spareIndex >= 0) {
     state.hardware.parts.splice(spareIndex, 1);
-    const speed = 1 - effectStrength(state, "repairSpeed");
+    // Сисадмин (этап 10) и мониторинг (этап 11) ускоряют ремонт.
+    const speed = 1 - effectStrength(state, "repairSpeed") - researchBonuses(state).repairSpeed;
     return { hours: Math.max(1, Math.round(hardwareData.repair.hoursWithSpare * speed)), spare: true };
   }
-  const speed = 1 - effectStrength(state, "repairSpeed");
+  const speed = 1 - effectStrength(state, "repairSpeed") - researchBonuses(state).repairSpeed;
   return { hours: Math.max(1, Math.round(hardwareData.repair.hoursWithoutSpare * speed)), spare: false };
 }
 

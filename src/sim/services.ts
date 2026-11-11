@@ -2,6 +2,7 @@ import {
   getService,
   getInternetPlan,
   servicesData,
+  STARTER_SERVICE_IDS,
   type ServiceDefinition,
   type ServiceId,
 } from "../data";
@@ -9,6 +10,7 @@ import { buildStatsForBuild } from "./components";
 import { nextFloat } from "./core/rng";
 import { DAYS_PER_MONTH, HOURS_PER_MONTH } from "./core/time";
 import { activeBuilds } from "./location";
+import { researchBonuses } from "./research";
 import { effectStrength } from "./staff";
 import type { GameState, HardwareBuild, ServicesState } from "./types";
 
@@ -51,8 +53,9 @@ function clampPriceMult(mult: number): number {
 /** Начальное состояние услуг: рыночная цена, всё выключено, без клиентов. */
 export function createServices(): ServicesState {
   return {
-    services: servicesData.services.map((service) => ({
-      id: service.id,
+    // Только стартовые услуги: остальные открывают исследования (этап 11).
+    services: STARTER_SERVICE_IDS.map((id) => ({
+      id,
       priceMult: 1,
       enabled: false,
       clientLimit: 0,
@@ -145,20 +148,27 @@ function freeCapacityPerBuild(state: GameState): Map<number, FreeCapacity> {
   return map;
 }
 
-function fits(definition: ServiceDefinition, free: FreeCapacity): boolean {
+function fits(definition: ServiceDefinition, free: FreeCapacity, density: number): boolean {
+  // Плотность (этап 11): виртуализация/оркестрация делят требуемое место.
   return (
-    free.cores >= definition.coresPerClient &&
-    free.ramGb >= definition.ramGbPerClient &&
-    free.storageGb >= definition.storageGbPerClient &&
+    free.cores >= definition.coresPerClient / density &&
+    free.ramGb >= definition.ramGbPerClient / density &&
+    free.storageGb >= definition.storageGbPerClient / density &&
     free.mbit >= definition.mbitPerClient
   );
 }
 
-function bestBuildId(definition: ServiceDefinition, free: Map<number, FreeCapacity>): number | null {
+function bestBuildId(
+  state: GameState,
+  definition: ServiceDefinition,
+  free: Map<number, FreeCapacity>,
+): number | null {
+  // Плотность (этап 11): виртуализация/оркестрация делят требуемое место.
+  const density = 1 + researchBonuses(state).density;
   let best: number | null = null;
   let bestScore = Number.POSITIVE_INFINITY;
   for (const [buildId, capacity] of free) {
-    if (!fits(definition, capacity)) continue;
+    if (!fits(definition, capacity, density)) continue;
     // Best-fit: наименьший нормированный остаток после размещения клиента.
     const score =
       (capacity.cores - definition.coresPerClient) +
@@ -224,7 +234,7 @@ export function tickServices(state: GameState): { state: GameState; events: Serv
     let joined = 0;
     while (arrivals > 0) {
       const free = freeCapacityPerBuild(state);
-      const buildId = bestBuildId(definition, free);
+      const buildId = bestBuildId(state, definition, free);
       if (buildId === null) break;
       const capacity = free.get(buildId);
       if (!capacity) break;

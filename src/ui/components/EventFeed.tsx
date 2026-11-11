@@ -113,6 +113,9 @@ export function EventFeed(): React.JSX.Element {
                   {event.kind === "staffFired" && t("feed.staffFired")}
                   {event.kind === "staffPromoted" &&
                     t("feed.staffPromoted", { amount: Math.round(event.amount ?? 0) })}
+                  {event.kind === "researchStarted" && t("feed.researchStarted")}
+                  {event.kind === "researchCompleted" && t("feed.researchCompleted")}
+                  {event.kind === "researchCancelled" && t("feed.researchCancelled")}
                 </span>
               </li>
             );

@@ -41,6 +41,66 @@
       "pricePerMonth": 8,
       "slaPercent": 99,
       "baseDemandPerDay": 0.4
+    },
+    {
+      "id": "vps",
+      "coresPerClient": 0.5,
+      "ramGbPerClient": 2,
+      "storageGbPerClient": 20,
+      "mbitPerClient": 1,
+      "pricePerMonth": 25,
+      "slaPercent": 99,
+      "baseDemandPerDay": 0.5
+    },
+    {
+      "id": "gameServers",
+      "coresPerClient": 1,
+      "ramGbPerClient": 2,
+      "storageGbPerClient": 30,
+      "mbitPerClient": 2,
+      "pricePerMonth": 45,
+      "slaPercent": 97,
+      "baseDemandPerDay": 0.4
+    },
+    {
+      "id": "managedDb",
+      "coresPerClient": 0.8,
+      "ramGbPerClient": 2,
+      "storageGbPerClient": 40,
+      "mbitPerClient": 0.5,
+      "pricePerMonth": 60,
+      "slaPercent": 99.9,
+      "baseDemandPerDay": 0.15
+    },
+    {
+      "id": "objectStorage",
+      "coresPerClient": 0.1,
+      "ramGbPerClient": 0.5,
+      "mbitPerClient": 2,
+      "storageGbPerClient": 100,
+      "pricePerMonth": 20,
+      "slaPercent": 99.5,
+      "baseDemandPerDay": 0.2
+    },
+    {
+      "id": "cdn",
+      "coresPerClient": 0.2,
+      "ramGbPerClient": 0.5,
+      "storageGbPerClient": 10,
+      "mbitPerClient": 5,
+      "pricePerMonth": 120,
+      "slaPercent": 99.9,
+      "baseDemandPerDay": 0.1
+    },
+    {
+      "id": "gpuCloud",
+      "coresPerClient": 4,
+      "ramGbPerClient": 8,
+      "storageGbPerClient": 50,
+      "mbitPerClient": 2,
+      "pricePerMonth": 500,
+      "slaPercent": 99.5,
+      "baseDemandPerDay": 0.05
     }
   ]
 }

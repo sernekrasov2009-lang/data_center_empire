@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "rules": {
+    "maxActive": 2,
+    "cancelRefundMult": 0.5
+  },
+  "projects": [
+    {
+      "id": "virtualization",
+      "cost": 800,
+      "days": 20,
+      "prerequisites": [],
+      "unlocksService": "vps",
+      "densityBonus": 0.3
+    },
+    {
+      "id": "gameHosting",
+      "cost": 1500,
+      "days": 30,
+      "prerequisites": ["virtualization"],
+      "unlocksService": "gameServers"
+    },
+    {
+      "id": "raidBackups",
+      "cost": 600,
+      "days": 15,
+      "prerequisites": [],
+      "hackMitigation": 0.5
+    },
+    {
+      "id": "monitoring",
+      "cost": 1000,
+      "days": 20,
+      "prerequisites": [],
+      "repairSpeedBonus": 0.2
+    },
+    {
+      "id": "replication",
+      "cost": 4000,
+      "days": 40,
+      "prerequisites": ["raidBackups"],
+      "unlocksService": "managedDb"
+    },
+    {
+      "id": "ddosProtection",
+      "cost": 3000,
+      "days": 30,
+      "prerequisites": ["monitoring"],
+      "ddosReduction": 0.6
+    },
+    {
+      "id": "coldAisles",
+      "cost": 5000,
+      "days": 30,
+      "prerequisites": ["monitoring"],
+      "coolingBonus": 0.3
+    },
+    {
+      "id": "storage",
+      "cost": 3500,
+      "days": 30,
+      "prerequisites": ["raidBackups"],
+      "unlocksService": "objectStorage"
+    },
+    {
+      "id": "orchestration",
+      "cost": 20000,
+      "days": 60,
+      "prerequisites": ["virtualization"],
+      "densityBonus": 0.25,
+      "autoPlace": true
+    },
+    {
+      "id": "cdn",
+      "cost": 60000,
+      "days": 60,
+      "prerequisites": ["storage"],
+      "unlocksService": "cdn"
+    },
+    {
+      "id": "liquidCooling",
+      "cost": 250000,
+      "days": 90,
+      "prerequisites": ["coldAisles"],
+      "pueReduction": 0.15
+    },
+    {
+      "id": "gpuAi",
+      "cost": 1000000,
+      "days": 160,
+      "prerequisites": ["orchestration"],
+      "unlocksService": "gpuCloud"
+    }
+  ]
+}

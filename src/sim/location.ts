@@ -6,6 +6,7 @@ import {
   type CoolingOption,
 } from "../data";
 import { buildNoiseDb, buildPowerW, noiseSum, roundMoney } from "./components";
+import { researchBonuses } from "./research";
 import { getGameDate } from "./core/time";
 import type { GameState, HardwareBuild, LocationState } from "./types";
 
@@ -88,9 +89,16 @@ export function outsideTempFor(hour: number): number {
 }
 
 /** Комнатная температура по DESIGN.md: T_room = T_outside + P_heat / C. */
-export function roomTempFor(outsideTempC: number, heatW: number, coolingId: string): number {
+export function roomTempFor(
+  state: GameState | null,
+  outsideTempC: number,
+  heatW: number,
+  coolingId: string,
+): number {
   const cooling = getCooling(coolingId);
-  const raw = outsideTempC + Math.max(0, heatW) / cooling.conductanceWPerK;
+  // Холодные/горячие коридоры (этап 11): +30% к эффективности охлаждения.
+  const conductance = cooling.conductanceWPerK * (1 + (state ? researchBonuses(state).cooling : 0));
+  const raw = outsideTempC + Math.max(0, heatW) / conductance;
   return round1(Math.max(locationData.climate.minRoomTempC, raw));
 }
 
@@ -113,7 +121,7 @@ export function createLocation(loadW = economyData.start.itLoadW): LocationState
     stabilizerOwned: false,
     movingUntilHour: null,
     outsideTempC,
-    roomTempC: roomTempFor(outsideTempC, loadW, definition.defaultCoolingId),
+    roomTempC: roomTempFor(null, outsideTempC, loadW, definition.defaultCoolingId),
   };
 }
 
@@ -156,7 +164,8 @@ export function coolingPowerW(state: GameState): number {
 
 /** Полное потребление из сети: ИТ-нагрузка × PUE плюс явное охлаждение. */
 export function totalPowerDrawW(state: GameState): number {
-  const pue = economyData.electricity.pue[getLocation(state).id];
+  // Жидкостное охлаждение (этап 11) снижает PUE.
+  const pue = economyData.electricity.pue[getLocation(state).id] - researchBonuses(state).pueReduction;
   return hardwareLoadW(state) * pue + coolingPowerW(state);
 }
 
@@ -422,7 +431,7 @@ export function tickLocation(state: GameState): { state: GameState; events: Loca
 
   const load = hardwareLoadW(next);
   next.location.outsideTempC = outsideTempFor(hour);
-  next.location.roomTempC = roomTempFor(next.location.outsideTempC, load, next.location.coolingId);
+  next.location.roomTempC = roomTempFor(next, next.location.outsideTempC, load, next.location.coolingId);
 
   // Переезд закончился: серверы автоматически занимают слоты новой локации.
   if (next.location.powerOff === "moving" && next.location.movingUntilHour !== null) {

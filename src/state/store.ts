@@ -33,6 +33,8 @@ import {
   setSpeed as applySpeed,
   fireStaff as applyFireStaff,
   hireStaff as applyHireStaff,
+  startResearch as applyStartResearch,
+  cancelResearch as applyCancelResearch,
   startBuild as applyStartBuild,
   togglePause as applyTogglePause,
   type GameState,
@@ -40,6 +42,7 @@ import {
   type LocationFailure,
   type ServiceFailure,
   type StaffFailure,
+  type ResearchFailure,
   type SimEvent,
   type Speed,
 } from "../sim";
@@ -48,7 +51,14 @@ import { createDefaultSettings, mergeSettings, type Settings } from "./settings"
 import { formatMoney } from "../ui/format";
 
 export type Screen = "menu" | "game";
-export type GameView = "dashboard" | "build" | "warehouse" | "location" | "services" | "staff";
+export type GameView =
+  | "dashboard"
+  | "build"
+  | "warehouse"
+  | "location"
+  | "services"
+  | "staff"
+  | "research";
 export type Overlay = "newGame" | "slots" | "pause" | "settings" | "gameOver" | null;
 export type SlotMode = "save" | "load";
 export type ToastKind = "info" | "warn" | "error";
@@ -145,6 +155,8 @@ interface GameStore {
   moveLocation: (locationId: string) => void;
   hireStaff: (roleId: string) => void;
   fireStaff: (employeeId: number) => void;
+  startResearch: (id: string) => void;
+  cancelResearch: (id: string) => void;
   resetBreaker: () => void;
   restartServers: () => void;
   setServicePrice: (serviceId: ServiceId, priceMult: number) => void;
@@ -238,6 +250,10 @@ export const useGameStore = create<GameStore>((set, get) => {
 
   function notifyStaffFailure(failure: StaffFailure): void {
     notify(`staff.error.${failure.code}`, failure.params, "error");
+  }
+
+  function notifyResearchFailure(failure: ResearchFailure): void {
+    notify(`research.error.${failure.code}`, failure.params, "error");
   }
 
   async function autosave(): Promise<void> {
@@ -650,6 +666,32 @@ export const useGameStore = create<GameStore>((set, get) => {
       });
     },
 
+    startResearch: (id) => {
+      const { settings } = get();
+      const result = applyStartResearch(get().game, id as never);
+      if (!result.ok) {
+        notifyResearchFailure(result.failure);
+        return;
+      }
+      set({ game: result.state, dirty: true });
+      notify("toast.researchStarted", {
+        cost: formatMoney(result.cost, settings.game.language, settings.game.numberFormat),
+      });
+    },
+
+    cancelResearch: (id) => {
+      const { settings } = get();
+      const result = applyCancelResearch(get().game, id as never);
+      if (!result.ok) {
+        notifyResearchFailure(result.failure);
+        return;
+      }
+      set({ game: result.state, dirty: true });
+      notify("toast.researchCancelled", {
+        refund: formatMoney(result.refund, settings.game.language, settings.game.numberFormat),
+      });
+    },
+
     resetBreaker: () => {
       const result = applyResetBreaker(get().game);
       if (!result.ok) {
@@ -931,6 +973,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         blackoutPrevented: { key: "toast.blackoutPrevented", kind: "info" },
         spikePrevented: { key: "toast.spikePrevented", kind: "info" },
         staffPromoted: { key: "toast.staffPromoted", kind: "info" },
+        researchCompleted: { key: "toast.researchCompleted", kind: "info" },
       };
       for (const [kind, toast] of Object.entries(worldToastMap)) {
         if (result.events.some((event) => event.kind === kind)) {
