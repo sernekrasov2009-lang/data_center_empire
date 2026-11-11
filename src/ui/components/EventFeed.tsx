@@ -105,6 +105,10 @@ export function EventFeed(): React.JSX.Element {
                     t("feed.clientHacked", { amount: (event.amount ?? 0).toFixed(2) })}
                   {event.kind === "electricityPriceSpiked" &&
                     t("feed.electricityPriceSpiked", { amount: Math.round(event.amount ?? 0) })}
+                  {event.kind === "locationMoved" && t("feed.locationMoved")}
+                  {event.kind === "blackoutPrevented" &&
+                    t("feed.blackoutPrevented", { amount: Math.round(event.amount ?? 0) })}
+                  {event.kind === "spikePrevented" && t("feed.spikePrevented")}
                 </span>
               </li>
             );

@@ -37,6 +37,9 @@ export function LocationScreen(): React.JSX.Element {
   const setCooling = useGameStore((state) => state.setCooling);
   const setInternetPlan = useGameStore((state) => state.setInternetPlan);
   const buyInsulation = useGameStore((state) => state.buyInsulation);
+  const buyUps = useGameStore((state) => state.buyUps);
+  const buyStabilizer = useGameStore((state) => state.buyStabilizer);
+  const moveLocation = useGameStore((state) => state.moveLocation);
   const resetBreaker = useGameStore((state) => state.resetBreaker);
   const restartServers = useGameStore((state) => state.restartServers);
 
@@ -84,7 +87,7 @@ export function LocationScreen(): React.JSX.Element {
           <p className="hardware__subtitle">{t("location.subtitle")}</p>
         </div>
         <div className="warehouse__summary">
-          <span className="badge">{t("location.kind.home")}</span>
+          <span className="badge">{t(`location.kind.${definition.id}`)}</span>
           <span className="badge" data-state={serversRunning(game) ? "ok" : "danger"}>
             {serversRunning(game) ? t("location.status.online") : t("location.status.offline")}
           </span>
@@ -106,6 +109,13 @@ export function LocationScreen(): React.JSX.Element {
             <button type="button" className="btn btn--small btn--primary" onClick={restartServers}>
               {t("location.restart")}
             </button>
+          )}
+          {(game.location.powerOff === "blackout" ||
+            game.location.powerOff === "channelFailure" ||
+            game.location.powerOff === "moving") && (
+            <p className="panel__hint">
+              {t(`location.off.${game.location.powerOff}.text`)}
+            </p>
           )}
         </div>
       )}
@@ -368,6 +378,90 @@ export function LocationScreen(): React.JSX.Element {
             </button>
           )}
           <p className="panel__hint">{t("location.noiseHint")}</p>
+        </section>
+
+        <section className="panel panel--wide" data-kind="upgrades">
+          <div className="panel__label">{t("location.upgrades")}</div>
+          <div className="loc-options">
+            <article className="loc-option" data-current={game.location.upsOwned}>
+              <div className="loc-option__head">
+                <strong>{t("location.ups")}</strong>
+                {game.location.upsOwned ? (
+                  <span className="badge" data-state="ok">{t("location.upsOwned")}</span>
+                ) : (
+                  <span className="loc-option__price">
+                    {formatMoney(locationData.ups.price, language, numberFormat)}
+                  </span>
+                )}
+              </div>
+              <div className="loc-option__specs">
+                <span>
+                  {t("location.upsDesc", { hours: Math.round(locationData.ups.maxMinutes / 60) })}
+                </span>
+              </div>
+              {!game.location.upsOwned && (
+                <button
+                  type="button"
+                  className="btn btn--small"
+                  disabled={game.money < locationData.ups.price}
+                  onClick={buyUps}
+                >
+                  {t("location.buyUps")}
+                </button>
+              )}
+            </article>
+
+            <article className="loc-option" data-current={game.location.stabilizerOwned}>
+              <div className="loc-option__head">
+                <strong>{t("location.stabilizer")}</strong>
+                {game.location.stabilizerOwned ? (
+                  <span className="badge" data-state="ok">{t("location.stabilizerOwned")}</span>
+                ) : (
+                  <span className="loc-option__price">
+                    {formatMoney(locationData.stabilizer.price, language, numberFormat)}
+                  </span>
+                )}
+              </div>
+              <div className="loc-option__specs">
+                <span>{t("location.stabilizerDesc")}</span>
+              </div>
+              {!game.location.stabilizerOwned && (
+                <button
+                  type="button"
+                  className="btn btn--small"
+                  disabled={game.money < locationData.stabilizer.price}
+                  onClick={buyStabilizer}
+                >
+                  {t("location.buyStabilizer")}
+                </button>
+              )}
+            </article>
+
+            {definition.id === "home" && (
+              <article className="loc-option">
+                <div className="loc-option__head">
+                  <strong>{t("location.move")}</strong>
+                  <span className="loc-option__price">
+                    {formatMoney(locationData.moving.price, language, numberFormat)}
+                  </span>
+                </div>
+                <div className="loc-option__specs">
+                  <span>{t("location.moveDesc")}</span>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn--small btn--primary"
+                  disabled={
+                    game.money < locationData.moving.price ||
+                    game.location.movingUntilHour !== null
+                  }
+                  onClick={() => moveLocation("garage")}
+                >
+                  {t("location.move")}
+                </button>
+              </article>
+            )}
+          </div>
         </section>
       </div>
     </div>

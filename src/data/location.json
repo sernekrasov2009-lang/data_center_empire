@@ -26,6 +26,17 @@
     "price": 280,
     "reductionDb": 8
   },
+  "ups": {
+    "price": 350,
+    "maxMinutes": 240
+  },
+  "stabilizer": {
+    "price": 200
+  },
+  "moving": {
+    "price": 300,
+    "downtimeHours": 24
+  },
   "cooling": [
     { "id": "window", "conductanceWPerK": 25, "powerW": 0, "price": 0, "noiseDb": 0 },
     { "id": "fan", "conductanceWPerK": 40, "powerW": 0, "price": 30, "noiseDb": 12 },
@@ -41,6 +52,18 @@
       "internetPlans": ["home-100", "home-300"],
       "defaultInternetPlanId": "home-100",
       "defaultCoolingId": "window"
+    },
+    {
+      "id": "garage",
+      "slots": 12,
+      "powerCapacityW": 3000,
+      "rentPerMonth": 50,
+      "internetPlans": [
+        "garage-500",
+        "garage-1000"
+      ],
+      "defaultInternetPlanId": "garage-500",
+      "defaultCoolingId": "fan"
     }
   ]
 }

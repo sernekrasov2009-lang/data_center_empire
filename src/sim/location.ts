@@ -20,7 +20,11 @@ export type LocationErrorCode =
   | "planNotAvailable"
   | "alreadyInsulated"
   | "powerNotOff"
-  | "notOverheated";
+  | "notOverheated"
+  | "locationNotFound"
+  | "locationNotAdjacent"
+  | "alreadyMoving"
+  | "alreadyOwned";
 
 export interface LocationFailure {
   code: LocationErrorCode;
@@ -35,7 +39,8 @@ export type LocationEventKind =
   | "serversRestarted"
   | "noiseComplaint"
   | "noiseFine"
-  | "neighborsShutdown";
+  | "neighborsShutdown"
+  | "locationMoved";
 
 export interface LocationEvent {
   kind: LocationEventKind;
@@ -104,6 +109,9 @@ export function createLocation(loadW = economyData.start.itLoadW): LocationState
     lastComplaintHour: -locationData.noise.minComplaintGapHours,
     lastFineHour: -locationData.noise.minComplaintGapHours,
     insulated: false,
+    upsOwned: false,
+    stabilizerOwned: false,
+    movingUntilHour: null,
     outsideTempC,
     roomTempC: roomTempFor(outsideTempC, loadW, definition.defaultCoolingId),
   };
@@ -289,6 +297,86 @@ export function buyInsulation(state: GameState): LocationResult<{ state: GameSta
   return { ok: true, state: next, cost };
 }
 
+/** ИБП покупается один раз и держит блэкауты до 4 часов (этап 9). */
+export function buyUps(state: GameState): LocationResult<{ state: GameState; cost: number }> {
+  if (state.location.upsOwned) {
+    return { ok: false, failure: { code: "alreadyOwned" } };
+  }
+  const cost = locationData.ups.price;
+  if (state.money < cost) {
+    return { ok: false, failure: { code: "notEnoughMoney", params: { total: cost } } };
+  }
+
+  const next = cloneState(state);
+  next.money = roundMoney(next.money - cost);
+  next.location.upsOwned = true;
+  return { ok: true, state: next, cost };
+}
+
+/** Стабилизатор напряжения гасит «скачок напряжения» (этап 9). */
+export function buyStabilizer(state: GameState): LocationResult<{ state: GameState; cost: number }> {
+  if (state.location.stabilizerOwned) {
+    return { ok: false, failure: { code: "alreadyOwned" } };
+  }
+  const cost = locationData.stabilizer.price;
+  if (state.money < cost) {
+    return { ok: false, failure: { code: "notEnoughMoney", params: { total: cost } } };
+  }
+
+  const next = cloneState(state);
+  next.money = roundMoney(next.money - cost);
+  next.location.stabilizerOwned = true;
+  return { ok: true, state: next, cost };
+}
+
+/**
+ * Переезд в новую локацию (DESIGN.md §4.1). Серверы переезжают вместе
+ * с игроком и автоматически расставляются по новым слотам; 24 часа
+ * простоя на перекладку. Охлаждение и тариф — дефолты новой локации.
+ */
+export function moveLocation(
+  state: GameState,
+  locationId: string,
+): LocationResult<{ state: GameState; cost: number }> {
+  const definition = locationData.locations.find((candidate) => candidate.id === locationId);
+  if (!definition) {
+    return { ok: false, failure: { code: "locationNotFound", params: { plan: locationId } } };
+  }
+  if (state.location.id === locationId) {
+    return { ok: false, failure: { code: "locationNotFound" } };
+  }
+  // Переезд доступен только на следующую локацию (дом → гараж).
+  const order = ["home", "garage", "colo", "datacenter"];
+  const currentIndex = order.indexOf(state.location.id);
+  const targetIndex = order.indexOf(definition.id);
+  if (targetIndex !== currentIndex + 1) {
+    return { ok: false, failure: { code: "locationNotAdjacent", params: { plan: locationId } } };
+  }
+  if (state.location.movingUntilHour !== null) {
+    return { ok: false, failure: { code: "alreadyMoving" } };
+  }
+
+  const cost = locationData.moving.price;
+  if (state.money < cost) {
+    return { ok: false, failure: { code: "notEnoughMoney", params: { total: cost } } };
+  }
+
+  const next = cloneState(state);
+  next.money = roundMoney(next.money - cost);
+  next.location.id = definition.id;
+  next.location.coolingId = definition.defaultCoolingId;
+  next.location.ownedCooling = [definition.defaultCoolingId];
+  next.location.internetPlanId = definition.defaultInternetPlanId;
+  next.location.powerOff = "moving";
+  next.location.movingUntilHour = next.time.hour + locationData.moving.downtimeHours;
+  next.location.insulated = false;
+  next.location.irritation = 0;
+  next.location.overloadHours = 0;
+  // Серверы снимаются со старых слотов: tickLocation расставит по новым.
+  next.hardware.builds = next.hardware.builds.map((build) => ({ ...build, slot: null }));
+  return { ok: true, state: next, cost };
+}
+
 /** Ручной сброс автомата после перегруза. */
 export function resetBreaker(state: GameState): LocationResult<{ state: GameState }> {
   if (state.location.powerOff !== "breaker") {
@@ -335,6 +423,19 @@ export function tickLocation(state: GameState): { state: GameState; events: Loca
   const load = hardwareLoadW(next);
   next.location.outsideTempC = outsideTempFor(hour);
   next.location.roomTempC = roomTempFor(next.location.outsideTempC, load, next.location.coolingId);
+
+  // Переезд закончился: серверы автоматически занимают слоты новой локации.
+  if (next.location.powerOff === "moving" && next.location.movingUntilHour !== null) {
+    if (hour >= next.location.movingUntilHour) {
+      next.location.powerOff = "none";
+      next.location.movingUntilHour = null;
+      for (const build of next.hardware.builds) {
+        if (build.status === "ready") assignFreeSlot(next, build);
+      }
+      events.push({ kind: "locationMoved" });
+    }
+    return { state: next, events };
+  }
 
   if (next.location.powerOff === "none") {
     if (load > definition.powerCapacityW) {

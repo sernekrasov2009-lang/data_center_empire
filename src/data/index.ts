@@ -314,7 +314,8 @@ export type PowerOffReason =
   | "overheat"
   | "neighbors"
   | "blackout"
-  | "channelFailure";
+  | "channelFailure"
+  | "moving";
 
 export interface CoolingOption {
   id: string;
@@ -359,6 +360,21 @@ export interface InsulationSpec {
   reductionDb: number;
 }
 
+export interface UpsSpec {
+  price: number;
+  /** Сколько минут ИБП держит нагрузку (пересчитано в часы: 240 мин = 4 ч). */
+  maxMinutes: number;
+}
+
+export interface StabilizerSpec {
+  price: number;
+}
+
+export interface MovingSpec {
+  price: number;
+  downtimeHours: number;
+}
+
 export interface LocationDefinition {
   id: LocationKind;
   slots: number;
@@ -377,6 +393,9 @@ export interface LocationFile {
   climate: ClimateSpec;
   noise: NoiseSpec;
   insulation: InsulationSpec;
+  ups: UpsSpec;
+  stabilizer: StabilizerSpec;
+  moving: MovingSpec;
   cooling: CoolingOption[];
   locations: LocationDefinition[];
 }
@@ -452,6 +471,16 @@ export function validateLocation(data: LocationFile): string[] {
   if (!(data.insulation.price >= 0)) errors.push("insulation.price: должно быть ≥ 0");
   if (!(data.insulation.reductionDb >= 0 && data.insulation.reductionDb <= 30)) {
     errors.push("insulation.reductionDb: ожидается 0…30");
+  }
+
+  if (!(data.ups.price >= 0)) errors.push("ups.price: должно быть ≥ 0");
+  if (!(data.ups.maxMinutes >= 1) || data.ups.maxMinutes > 1440) {
+    errors.push("ups.maxMinutes: ожидается 1…1440");
+  }
+  if (!(data.stabilizer.price >= 0)) errors.push("stabilizer.price: должно быть ≥ 0");
+  if (!(data.moving.price >= 0)) errors.push("moving.price: должно быть ≥ 0");
+  if (!Number.isInteger(data.moving.downtimeHours) || data.moving.downtimeHours < 0 || data.moving.downtimeHours > 168) {
+    errors.push("moving.downtimeHours: ожидается целое 0…168");
   }
 
   const coolingIds = data.cooling.map((option) => option.id);

@@ -1,4 +1,4 @@
-import { eventsData } from "../data";
+import { eventsData, locationData } from "../data";
 import { chance, nextFloat, nextInt } from "./core/rng";
 import { HOURS_PER_MONTH } from "./core/time";
 import type { ActiveEventState, GameState, WorldEventsState } from "./types";
@@ -12,7 +12,9 @@ export type WorldEventKind =
   | "channelFailureStarted"
   | "channelFailureEnded"
   | "clientHacked"
-  | "electricityPriceSpiked";
+  | "electricityPriceSpiked"
+  | "blackoutPrevented"
+  | "spikePrevented";
 
 export interface WorldEvent {
   kind: WorldEventKind;
@@ -85,35 +87,45 @@ export function rollDailyEvents(state: GameState, month: number): WorldEvent[] {
         eventsData.blackout.minHours,
         eventsData.blackout.maxHours,
       );
-      startEvent(state, "blackout", hours);
-      state.location.powerOff = "blackout";
-      events.push({ kind: "blackoutStarted", amount: hours });
+      // ИБП держит блэкаут до 4 часов без простоя (этап 9).
+      const upsHours = state.location.upsOwned ? locationData.ups.maxMinutes / 60 : 0;
+      if (hours <= upsHours) {
+        events.push({ kind: "blackoutPrevented", amount: hours });
+      } else {
+        startEvent(state, "blackout", hours);
+        state.location.powerOff = "blackout";
+        events.push({ kind: "blackoutStarted", amount: hours });
+      }
     }
   }
 
   // Скачок напряжения: ломает БП случайного работающего сервера.
   if (chance(state.rng, eventsData.voltageSpike.chancePerDay)) {
-    const psuBuilds = state.hardware.builds
-      .filter(
-        (build) => build.slot !== null && build.parts.some((part) => part.componentId.startsWith("psu-")),
-      )
-      .map((build) => ({
-        build,
-        psu: build.parts.find((part) => part.componentId.startsWith("psu-") && !part.broken),
-      }))
-      .filter((entry) => entry.psu !== undefined);
-    if (psuBuilds.length > 0) {
-      const entry = psuBuilds[Math.floor(nextFloat(state.rng) * psuBuilds.length)];
-      if (entry) {
-      const target = entry.build;
-      const psu = entry.psu!;
-      if (psu && !psu.broken) {
-        psu.broken = true;
-        psu.repairDoneHour = hour + 48; // ремонт БП без запчасти: 48 ч
-      events.push({ kind: "voltageSpike", ref: String(target.id) });
+    if (state.location.stabilizerOwned) {
+      events.push({ kind: "spikePrevented" });
+    } else {
+      const psuBuilds = state.hardware.builds
+        .filter(
+          (build) => build.slot !== null && build.parts.some((part) => part.componentId.startsWith("psu-")),
+        )
+        .map((build) => ({
+          build,
+          psu: build.parts.find((part) => part.componentId.startsWith("psu-") && !part.broken),
+        }))
+        .filter((entry) => entry.psu !== undefined);
+      if (psuBuilds.length > 0) {
+        const entry = psuBuilds[Math.floor(nextFloat(state.rng) * psuBuilds.length)];
+        if (entry) {
+          const target = entry.build;
+          const psu = entry.psu!;
+          if (psu && !psu.broken) {
+            psu.broken = true;
+            psu.repairDoneHour = hour + 48; // ремонт БП без запчасти: 48 ч
+            events.push({ kind: "voltageSpike", ref: String(target.id) });
+          }
+        }
       }
     }
-  }
   }
 
   // DDoS: 0,5%/день + рост с репутацией выше 0,7.

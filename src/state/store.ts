@@ -10,6 +10,8 @@ import type { SaveMeta, SaveSlotId } from "../save/types";
 import {
   advanceTicks,
   buyInsulation as applyBuyInsulation,
+  buyStabilizer as applyBuyStabilizer,
+  buyUps as applyBuyUps,
   buyUsedLot as applyBuyUsedLot,
   cancelOrder as applyCancelOrder,
   createGame,
@@ -24,6 +26,7 @@ import {
   setCooling as applySetCooling,
   setInternetPlan as applySetInternetPlan,
   setServiceLimit as applySetServiceLimit,
+  moveLocation as applyMoveLocation,
   setServicePrice as applySetServicePrice,
   toggleService as applyToggleService,
   setPaused,
@@ -134,6 +137,9 @@ interface GameStore {
   setCooling: (coolingId: string) => void;
   setInternetPlan: (planId: string) => void;
   buyInsulation: () => void;
+  buyUps: () => void;
+  buyStabilizer: () => void;
+  moveLocation: (locationId: string) => void;
   resetBreaker: () => void;
   restartServers: () => void;
   setServicePrice: (serviceId: ServiceId, priceMult: number) => void;
@@ -573,6 +579,42 @@ export const useGameStore = create<GameStore>((set, get) => {
       });
     },
 
+    buyUps: () => {
+      const { settings } = get();
+      const result = applyBuyUps(get().game);
+      if (!result.ok) {
+        notifyLocationFailure(result.failure);
+        return;
+      }
+      set({ game: result.state, dirty: true });
+      notify("toast.upsBought", {
+        cost: formatMoney(result.cost, settings.game.language, settings.game.numberFormat),
+      });
+    },
+
+    buyStabilizer: () => {
+      const { settings } = get();
+      const result = applyBuyStabilizer(get().game);
+      if (!result.ok) {
+        notifyLocationFailure(result.failure);
+        return;
+      }
+      set({ game: result.state, dirty: true });
+      notify("toast.stabilizerBought", {
+        cost: formatMoney(result.cost, settings.game.language, settings.game.numberFormat),
+      });
+    },
+
+    moveLocation: (locationId) => {
+      const result = applyMoveLocation(get().game, locationId);
+      if (!result.ok) {
+        notifyLocationFailure(result.failure);
+        return;
+      }
+      set({ game: result.state, dirty: true });
+      notify("toast.locationMoved", undefined, "info");
+    },
+
     resetBreaker: () => {
       const result = applyResetBreaker(get().game);
       if (!result.ok) {
@@ -851,6 +893,8 @@ export const useGameStore = create<GameStore>((set, get) => {
         channelFailureStarted: { key: "toast.channelFailureStarted", kind: "error" },
         clientHacked: { key: "toast.clientHacked", kind: "warn" },
         electricityPriceSpiked: { key: "toast.electricityPriceSpiked", kind: "warn" },
+        blackoutPrevented: { key: "toast.blackoutPrevented", kind: "info" },
+        spikePrevented: { key: "toast.spikePrevented", kind: "info" },
       };
       for (const [kind, toast] of Object.entries(worldToastMap)) {
         if (result.events.some((event) => event.kind === kind)) {

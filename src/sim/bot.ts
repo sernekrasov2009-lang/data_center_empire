@@ -1,5 +1,7 @@
 import {
+  economy,
   findComponent,
+  locationData,
   servicesData,
 } from "../data";
 import { buildStats, validateBuild } from "./components";
@@ -9,6 +11,13 @@ import { resolveTickets } from "./reputation";
 import {
   toggleService,
 } from "./services";
+import {
+  buyInsulation,
+  buyUps,
+  moveLocation,
+  restartServers,
+  setCooling,
+} from "./location";
 import type { GameState } from "./types";
 
 /**
@@ -78,7 +87,7 @@ function serverMonthlyCost(recipe: BotRecipe, hoursPerMonth: number, pricePerKwh
 }
 
 export interface BotDecision {
-  kind: "enableService" | "orderServer" | "buildServer" | "wait" | "warn";
+  kind: "enableService" | "orderServer" | "buildServer" | "wait" | "warn" | "moveLocation";
   detail: string;
 }
 
@@ -130,6 +139,64 @@ export function botDay(state: GameState): BotDayResult {
   const built = tryBuildFromWarehouse(next, decisions);
   next = built.state;
   if (built.built) blocker = null;
+
+  // 2.5 Переезд в гараж, когда домашние слоты закончились (DECISIONS 50).
+  // Копим moving.price + резерв $300 на кануне переезда.
+  if (next.location.id === "home") {
+    const slot = firstFreeSlot(next);
+    const powerFull = totalPowerDrawW(next) >= getLocation(next).powerCapacityW * 0.85;
+    if ((slot === null || powerFull) && next.money >= locationData.moving.price + 300) {
+      const result = moveLocation(next, "garage");
+      if (result.ok) {
+        next = result.state;
+        decisions.push({
+          kind: "moveLocation",
+          detail: `переезд в гараж, $${result.cost}, 24 ч простоя`,
+        });
+      } else {
+        decisions.push({ kind: "warn", detail: `переезд не удался: ${result.failure.code}` });
+      }
+    }
+  }
+
+  // 2.6 В гараже: покупаем ИБП, чтобы блэкауты не рвали аптайм.
+  if (next.location.id === "garage" && !next.location.upsOwned) {
+    if (next.money >= locationData.ups.price + 300) {
+      const result = buyUps(next);
+      if (result.ok) {
+        next = result.state;
+        decisions.push({ kind: "wait", detail: `куплен ИБП, $${result.cost}` });
+      }
+    }
+  }
+
+  // 2.7 Шум: без изоляции в гараже штрафы $50 съедают всю прибыль.
+  // Изоляция −8 дБ возвращает шум под ночной лимит.
+  if (!next.location.insulated && next.money >= locationData.insulation.price + 300) {
+    const result = buyInsulation(next);
+    if (result.ok) {
+      next = result.state;
+      decisions.push({ kind: "wait", detail: `куплена шумоизоляция, $${result.cost}` });
+    }
+  }
+
+  // 2.8 Перегрев: с ростом числа серверов вентилятора мало — покупаем сплит.
+  if (next.location.coolingId === "fan" && next.money >= 650 + 300) {
+    const result = setCooling(next, "split");
+    if (result.ok && result.cost > 0) {
+      next = result.state;
+      decisions.push({ kind: "wait", detail: `куплен сплит-кондиционер, $${result.cost}` });
+    }
+  }
+
+  // 2.9 Аварийное отключение из-за перегрева: ждём остывания и включаем обратно.
+  if (next.location.powerOff === "overheat") {
+    const result = restartServers(next);
+    if (result.ok) {
+      next = result.state;
+      decisions.push({ kind: "wait", detail: "серверы перезапущены после перегрева" });
+    }
+  }
 
   // 3. Заказ нового сервера, если окупается и есть место/мощность.
   const ordered = tryOrderServer(next, decisions);
@@ -191,8 +258,12 @@ function tryOrderServer(
 
   // Автомат: заказываем сервер только если ИТ-нагрузка после добавления
   // не превысит ёмкость с запасом (PUE 1,8 умножается в экономике).
-  const pue = 1.8; // PUE домашней локации из economy.json
-  const pricePerKwh = 0.12; // тариф «дом» из economy.json
+  const locationId = getLocation(next).id as "home" | "garage";
+  const pue = economy.electricity.pue[locationId]; // 1,8 дом / 1,6 гараж
+  const tariffId = locationId === "home" ? "home" : "commercial";
+  const pricePerKwh = economy.electricity.tariffs.find(
+    (t: { id: string; pricePerKwh: number }) => t.id === tariffId,
+  )!.pricePerKwh;
   const hoursPerMonth = 720; // 24 ч × 30 дн
   const capacity = getLocation(next).powerCapacityW;
   const currentDraw = totalPowerDrawW(next);

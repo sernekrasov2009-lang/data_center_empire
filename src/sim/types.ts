@@ -50,7 +50,12 @@ export type SimEventKind =
   | "channelFailureStarted"
   | "channelFailureEnded"
   | "clientHacked"
-  | "electricityPriceSpiked";
+  | "electricityPriceSpiked"
+  | "locationMoved"
+  | "upsBought"
+  | "stabilizerBought"
+  | "blackoutPrevented"
+  | "spikePrevented";
 
 export interface SimEvent {
   id: number;
@@ -222,6 +227,12 @@ export interface LocationState {
   lastComplaintHour: number;
   lastFineHour: number;
   insulated: boolean;
+  /** ИБП: держит короткие блэкауты (этап 9). */
+  upsOwned: boolean;
+  /** Стабилизатор: гасит скачки напряжения (этап 9). */
+  stabilizerOwned: boolean;
+  /** Час, до которого длится переезд (powerOff = "moving"); null — не переезжаем. */
+  movingUntilHour: number | null;
   /** Наружная температура, °C. */
   outsideTempC: number;
   /** Температура в комнате, °C. */

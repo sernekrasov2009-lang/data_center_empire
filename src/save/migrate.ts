@@ -383,7 +383,14 @@ function asLocation(value: unknown): LocationState {
       ? value.internetPlanId
       : definition.defaultInternetPlanId;
 
-  const offReasons: readonly PowerOffReason[] = ["breaker", "overheat", "neighbors"];
+  const offReasons: readonly PowerOffReason[] = [
+    "breaker",
+    "overheat",
+    "neighbors",
+    "blackout",
+    "channelFailure",
+    "moving",
+  ];
   const powerOff =
     typeof value.powerOff === "string" && (offReasons as readonly string[]).includes(value.powerOff)
       ? (value.powerOff as PowerOffReason)
@@ -401,6 +408,12 @@ function asLocation(value: unknown): LocationState {
     lastComplaintHour: Math.max(-minGap, Math.floor(asNumber(value.lastComplaintHour, -minGap))),
     lastFineHour: Math.max(-minGap, Math.floor(asNumber(value.lastFineHour, -minGap))),
     insulated: value.insulated === true,
+    upsOwned: value.upsOwned === true,
+    stabilizerOwned: value.stabilizerOwned === true,
+    movingUntilHour:
+      typeof value.movingUntilHour === "number" && Number.isFinite(value.movingUntilHour)
+        ? Math.max(0, Math.floor(value.movingUntilHour))
+        : null,
     outsideTempC: Math.min(60, Math.max(-40, asNumber(value.outsideTempC, fallback.outsideTempC))),
     roomTempC: Math.min(120, Math.max(-20, asNumber(value.roomTempC, fallback.roomTempC))),
   };
