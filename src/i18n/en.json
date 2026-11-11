@@ -438,6 +438,8 @@
   "dash.check.noise": "Noise, neighbors and soundproofing",
   "location.title": "Location & racks",
   "location.subtitle": "Home room: two servers, a 1.5 kW breaker, cooling and neighbors.",
+  "location.subtitle.garage": "Garage: 12 slots, a 3 kW breaker, cooling and neighbors next door.",
+  "location.subtitle.colo": "Rented hall: 42U racks, PUE 1.5, industrial electricity tariff.",
   "location.kind.home": "Home room",
   "location.status.online": "Servers online",
   "location.status.offline": "Servers offline",

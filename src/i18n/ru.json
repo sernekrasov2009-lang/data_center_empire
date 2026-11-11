@@ -438,6 +438,8 @@
   "dash.check.noise": "Шум, соседи и шумоизоляция",
   "location.title": "Локация и стойки",
   "location.subtitle": "Домашняя комната: два сервера, автомат на 1,5 кВт, охлаждение и соседи.",
+  "location.subtitle.garage": "Гараж: 12 слотов, автомат на 3 кВт, охлаждение и соседи за стеной.",
+  "location.subtitle.colo": "Арендованный зал: стойки 42U, PUE 1,5, промышленный тариф электричества.",
   "location.kind.home": "Комната дома",
   "location.status.online": "Серверы работают",
   "location.status.offline": "Серверы выключены",

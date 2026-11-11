@@ -90,7 +90,9 @@ export function LocationScreen(): React.JSX.Element {
       <div className="hardware__head">
         <div>
           <h1 className="hardware__title">{t("location.title")}</h1>
-          <p className="hardware__subtitle">{t("location.subtitle")}</p>
+          <p className="hardware__subtitle">
+            {t(definition.id === "home" ? "location.subtitle" : `location.subtitle.${definition.id}`)}
+          </p>
         </div>
         <div className="warehouse__summary">
           <span className="badge">{t(`location.kind.${definition.id}`)}</span>
